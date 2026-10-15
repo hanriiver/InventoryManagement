@@ -249,10 +249,19 @@ $('#btn-seed').addEventListener('click', () => {
   run(async () => {
     const r = await api('/seed/house-recipes', { method: 'POST' });
     const lines = [
-      `재료 새로 추가 ${r.ingredientsAdded.length}개${r.ingredientsAdded.length ? `: ${r.ingredientsAdded.join(', ')}` : ''}`,
-      `레시피 입력 ${r.recipesSet.length}개${r.recipesSkipped.length ? ` · 이미 있어서 건너뜀: ${r.recipesSkipped.join(', ')}` : ''}`,
+      `✅ 재료 새로 추가 ${r.ingredientsAdded.length}개${r.ingredientsAdded.length ? `: ${r.ingredientsAdded.join(', ')}` : ''}`,
+      `✅ 가게 레시피 ${r.recipesSet.length}개${r.recipesSkipped.length ? ` (이미 있어서 건너뜀: ${r.recipesSkipped.join(', ')})` : ''}`,
     ];
-    if (r.menusCreated.length) lines.push(`⚠️ 토스 메뉴에서 같은 이름을 못 찾아 새로 만든 메뉴: ${r.menusCreated.join(', ')}\n   → 토스 메뉴 이름이 다르면 그 메뉴 이름을 토스와 똑같이 고쳐 주세요`);
+    if (r.whisky.length) {
+      lines.push('', `🥃 위스키 자동 등록 ${r.whisky.length}개 (700ml 병, 한 잔 30ml)`);
+      r.whisky.forEach((w) => lines.push(`  · ${w.menu} → ${w.ingredient} ${w.amount}${w.note ? ` (${w.note})` : ''}`));
+    }
+    if (r.classics.length) {
+      lines.push('', `🍹 표준 레시피 적용 ${r.classics.length}개 — 가게 방식과 다르면 수정해 주세요`);
+      r.classics.forEach((c) => lines.push(`  · ${c.menu}: ${c.summary}`));
+    }
+    if (r.menusCreated.length) lines.push('', `⚠️ 토스에서 같은 이름을 못 찾아 새로 만든 메뉴: ${r.menusCreated.join(', ')}`, '   → 토스 메뉴 이름이 다르면 이 메뉴 이름을 토스와 똑같이 고쳐 주세요');
+    if (r.remaining.length) lines.push('', `❓ 아직 레시피가 없는 메뉴 ${r.remaining.length}개 (재고와 무관하면 "차감 안 함"으로):`, `  ${r.remaining.join(', ')}`);
     lines.push('', '직접 확인/입력이 필요한 것:', ...r.todo.map((t) => `· ${t}`), '· 새로 추가된 재료는 재고 0이라, 재고 탭에서 "현재 양 입력"으로 실제 양을 넣어 주세요');
     const out = $('#seed-output');
     out.textContent = lines.join('\n');
