@@ -1,0 +1,27 @@
+name = "inventory-management"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# 관리자 웹(정적 파일). /api, /webhook 경로는 Worker가 처리합니다.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/webhook/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "inventory"
+# `npx wrangler d1 create inventory` 실행 후 출력되는 id로 교체하세요.
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# 15분마다: 토스 주문 동기화 + 마감 리포트 시각 확인 (UTC 기준이지만 시각 판단은 코드에서 KST로 처리)
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+TOSS_API_BASE = "https://open-api.tossplace.com/api-public/openapi/v1"
+
+# 비밀값은 `npx wrangler secret put <이름>` 으로 등록합니다 (README 참고).
+# TOSS_ACCESS_KEY, TOSS_SECRET_KEY, TOSS_MERCHANT_ID, TOSS_WEBHOOK_SECRET
+# TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET, ADMIN_TOKEN

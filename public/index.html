@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>재고 관리</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header>
+  <h1>🍸 재고 관리</h1>
+  <nav id="tabs">
+    <button data-tab="stock" class="active">재고</button>
+    <button data-tab="ingredients">재료</button>
+    <button data-tab="menus">메뉴·레시피</button>
+    <button data-tab="history">기록·발주</button>
+    <button data-tab="settings">설정</button>
+  </nav>
+</header>
+
+<main>
+  <section id="login" hidden>
+    <h2>관리자 토큰</h2>
+    <p class="muted">ADMIN_TOKEN 비밀값과 같은 값을 입력하세요. 이 브라우저에만 저장됩니다.</p>
+    <form id="login-form" class="row">
+      <input id="token" type="password" placeholder="ADMIN_TOKEN" required />
+      <button>확인</button>
+    </form>
+  </section>
+
+  <!-- 재고 현황 -->
+  <section data-panel="stock">
+    <div class="toolbar">
+      <h2>재고 현황</h2>
+      <button id="btn-reorder">기준 이하 발주서 보내기</button>
+    </div>
+    <table>
+      <thead><tr><th>재료</th><th>현재고</th><th>발주 기준</th><th></th></tr></thead>
+      <tbody id="stock-rows"></tbody>
+    </table>
+  </section>
+
+  <!-- 재료 -->
+  <section data-panel="ingredients" hidden>
+    <h2 id="ing-form-title">재료 추가</h2>
+    <form id="ing-form" class="grid">
+      <input type="hidden" name="id" />
+      <label>이름<input name="name" required placeholder="핸드릭스 진" /></label>
+      <label>분류
+        <select name="category">
+          <option value="liquor">술</option><option value="fruit">과일</option>
+          <option value="syrup">시럽</option><option value="etc">기타</option>
+        </select>
+      </label>
+      <label>단위
+        <select name="unit">
+          <option value="ml">ml (병)</option><option value="ea">개</option><option value="g">g</option>
+        </select>
+      </label>
+      <label class="ml-only">1병 용량(ml)<input name="container_size" type="number" step="any" value="700" /></label>
+      <label>표시 단위<input name="container_label" placeholder="병 / 개 / 팩" /></label>
+      <label class="ea-only">1개당 즙(ml)<input name="yield_ml" type="number" step="any" placeholder="레몬 40, 라임 20" /></label>
+      <label>발주 기준 (이하이면 알림)<input name="reorder_point" type="number" step="any" value="1" /></label>
+      <label>적정재고 (선택)<input name="par_level" type="number" step="any" placeholder="비우면 1개씩 발주" /></label>
+      <label>발주서 이름<input name="order_alias" placeholder="핸드릭스진" /></label>
+      <label>공급처
+        <select name="supplier"><option value="manual">직접 발주</option><option value="coupang">쿠팡 (예정)</option></select>
+      </label>
+      <label class="new-only">초기 재고<input name="initial_stock" placeholder="2 (병) 또는 350ml" /></label>
+      <div class="actions">
+        <button>저장</button>
+        <button type="button" id="ing-reset" class="secondary">새로 입력</button>
+      </div>
+    </form>
+    <h2>재료 목록</h2>
+    <table>
+      <thead><tr><th>이름</th><th>단위</th><th>기준/적정</th><th>발주명</th><th></th></tr></thead>
+      <tbody id="ing-rows"></tbody>
+    </table>
+  </section>
+
+  <!-- 메뉴 / 레시피 -->
+  <section data-panel="menus" hidden>
+    <h2>메뉴 추가</h2>
+    <form id="menu-form" class="row">
+      <input name="name" placeholder="메뉴 이름 (토스 상품명과 같게)" required />
+      <input name="toss_item_id" placeholder="토스 상품 ID (선택)" />
+      <button>추가</button>
+    </form>
+    <p class="muted">토스 상품 ID가 있으면 ID로, 없으면 이름(공백 무시)으로 매칭합니다. "샷 추가" 같은 옵션도 같은 이름의 메뉴로 등록하면 차감됩니다.</p>
+    <div id="menu-list"></div>
+  </section>
+
+  <!-- 기록 / 발주 -->
+  <section data-panel="history" hidden>
+    <h2>레시피 미등록 판매</h2>
+    <table><thead><tr><th>메뉴</th><th>토스 ID</th><th>누적 수량</th><th></th></tr></thead><tbody id="unmapped-rows"></tbody></table>
+    <h2>발주서</h2>
+    <div id="po-list"></div>
+    <h2>재고 변동 기록</h2>
+    <table><thead><tr><th>시각(UTC)</th><th>재료</th><th>변동</th><th>사유</th><th>참조</th></tr></thead><tbody id="mv-rows"></tbody></table>
+  </section>
+
+  <!-- 설정 -->
+  <section data-panel="settings" hidden>
+    <h2>연동 상태</h2>
+    <ul id="status" class="status"></ul>
+    <h2>마감 리포트</h2>
+    <form id="settings-form" class="grid">
+      <label>마감 리포트 시각 (KST)<input name="closing_time" placeholder="02:00" pattern="\d{1,2}:\d{2}" /></label>
+      <label>영업일 기준 시각 (KST)<input name="business_day_start" placeholder="06:00" pattern="\d{1,2}:\d{2}" /></label>
+      <div class="actions"><button>저장</button><button type="button" id="btn-report" class="secondary">지금 리포트 보내기</button></div>
+    </form>
+    <h2>도구</h2>
+    <div class="row wrap">
+      <button id="btn-tg-setup" class="secondary">텔레그램 웹훅 등록</button>
+      <button id="btn-sync" class="secondary">토스 주문 동기화</button>
+      <button id="btn-toss-sample" class="secondary">토스 주문 원본 보기</button>
+      <button id="btn-logout" class="secondary">로그아웃</button>
+    </div>
+    <h2>테스트 판매 (토스 연동 전 확인용)</h2>
+    <form id="manual-sale" class="row">
+      <select name="menu_item_id" id="manual-menu"></select>
+      <input name="quantity" type="number" value="1" min="1" />
+      <button>판매 처리</button>
+    </form>
+    <pre id="output" class="output" hidden></pre>
+  </section>
+</main>
+
+<div id="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# `cp .dev.vars.example .dev.vars` 후 값을 채우면 `npm run dev`에서 사용됩니다.
+ADMIN_TOKEN=change-me
+TOSS_ACCESS_KEY=
+TOSS_SECRET_KEY=
+TOSS_MERCHANT_ID=
+TOSS_WEBHOOK_SECRET=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_WEBHOOK_SECRET=
