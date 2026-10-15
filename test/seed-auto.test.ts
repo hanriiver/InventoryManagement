@@ -51,3 +51,19 @@ describe('표준 레시피 데이터', () => {
     for (const r of CLASSIC_RECIPES) for (const l of r.lines) expect(names.has(l.ingredient), `${r.menu}: ${l.ingredient}`).toBe(true);
   });
 });
+
+describe('맥주 메뉴', async () => {
+  const { beerRecipe } = await import('../src/seed/house-recipes');
+  it('보일러메이커는 맥주 종류에 맞는 짐빔 + 맥주 1개', () => {
+    expect(beerRecipe('보일러메이커 IPA')).toEqual([{ ingredient: '짐빔 라이', amount: 30, unit: 'ml' }, { ingredient: 'IPA', amount: 1, unit: 'ea' }]);
+    expect(beerRecipe('보일러메이커 (라거)')).toEqual([{ ingredient: '짐빔 화이트', amount: 30, unit: 'ml' }, { ingredient: '라거', amount: 1, unit: 'ea' }]);
+    expect(beerRecipe('보일러메이커')).toBeNull();
+  });
+  it('맥주 단품은 1개', () => {
+    expect(beerRecipe('IPA')).toEqual([{ ingredient: 'IPA', amount: 1, unit: 'ea' }]);
+    expect(beerRecipe('앰버 라거')).toEqual([{ ingredient: '라거', amount: 1, unit: 'ea' }]);
+    expect(beerRecipe('기네스 드래프트')).toEqual([{ ingredient: '기네스', amount: 1, unit: 'ea' }]);
+    expect(beerRecipe('아이리시 카밤 (기네스)')).toBeNull();
+    expect(beerRecipe('진토닉')).toBeNull();
+  });
+});

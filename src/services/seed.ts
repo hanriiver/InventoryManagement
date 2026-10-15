@@ -1,6 +1,6 @@
 import type { Env, Ingredient, MenuItem, RecipeLine } from '../types';
 import * as repo from '../db/repo';
-import { HOUSE_INGREDIENTS, HOUSE_RECIPES, HOUSE_RECIPE_TODO, type SeedIngredient, type SeedRecipe } from '../seed/house-recipes';
+import { HOUSE_INGREDIENTS, HOUSE_RECIPES, HOUSE_RECIPE_TODO, beerRecipe, type SeedIngredient, type SeedRecipe } from '../seed/house-recipes';
 import { CLASSIC_INGREDIENTS, CLASSIC_RECIPES } from '../seed/classics';
 import { detectWhisky } from '../seed/whisky';
 import { nameKeys, normalizeMenuName } from '../seed/matching';
@@ -11,6 +11,10 @@ export interface SeedResult {
   recipesSet: { menu: string; matched: string }[];
   recipesSkipped: string[];
   menusCreated: string[];
+  /** 따로 생겼던 중복 메뉴를 토스 메뉴로 합친 것 */
+  merged: { from: string; into: string }[];
+  /** 맥주 메뉴 */
+  beer: { menu: string; summary: string }[];
   /** 위스키 자동 인식: 토스 메뉴 → 재료, 양 */
   whisky: { menu: string; ingredient: string; amount: string; note?: string }[];
   /** 표준 레시피를 넣은 메뉴 (확인 필요) */
@@ -30,7 +34,7 @@ const norm = normalizeMenuName;
 export async function seedHouseRecipes(env: Env, overwrite = false): Promise<SeedResult> {
   const db = env.DB;
   const result: SeedResult = {
-    ingredientsAdded: [], ingredientsKept: [], recipesSet: [], recipesSkipped: [], menusCreated: [],
+    ingredientsAdded: [], ingredientsKept: [], recipesSet: [], recipesSkipped: [], menusCreated: [], merged: [], beer: [],
     whisky: [], classics: [], remaining: [], todo: HOUSE_RECIPE_TODO,
   };
 
@@ -56,7 +60,9 @@ export async function seedHouseRecipes(env: Env, overwrite = false): Promise<See
 
   for (const s of HOUSE_INGREDIENTS) await ensureIngredient(s);
 
-  const menus = await repo.listMenuItems(db);
+  result.merged = await mergeDuplicateMenus(db);
+  // 토스에서 온 메뉴(토스 ID 있음)를 먼저 찾도록 정렬
+  const menus = (await repo.listMenuItems(db)).sort((a, b) => Number(!a.toss_item_id) - Number(!b.toss_item_id));
   const recipes = await repo.listRecipes(db);
   const hasRecipe = new Set(recipes.map((r: RecipeLine) => r.menu_item_id));
   const findMenu = (name: string, aliases: string[] = []) => {
@@ -106,6 +112,15 @@ export async function seedHouseRecipes(env: Env, overwrite = false): Promise<See
     result.classics.push({ menu: menu.name, summary: r.lines.map((l) => `${l.ingredient} ${l.amount}${l.unit === 'ea' ? '개' : 'ml'}`).join(', ') });
   }
 
+  // 2.5) 맥주: 이름에 IPA/라거/기네스, 보일러메이커
+  for (const menu of menus) {
+    if (hasRecipe.has(menu.id) || !menu.active) continue;
+    const lines = beerRecipe(menu.name);
+    if (!lines) continue;
+    await writeRecipe(menu, lines);
+    result.beer.push({ menu: menu.name, summary: lines.map((l) => `${l.ingredient} ${l.amount}${l.unit === 'ea' ? '개' : 'ml'}`).join(', ') });
+  }
+
   // 3) 위스키: 메뉴 이름/카테고리로 인식 → 제품명 재료(700ml) + 30ml
   for (const menu of menus) {
     if (hasRecipe.has(menu.id) || !menu.active || menu.kind === 'option') continue;
@@ -139,4 +154,27 @@ export function findSimilarLiquor(ingredients: Ingredient[], product: string): I
   });
   if (cands.length === 1) return cands[0]!;
   return cands.find((i) => /화이트|오리지널|스탠다드/.test(i.name)) ?? null;
+}
+
+/**
+ * 예전 버전에서 이름 매칭이 안 돼 따로 만들어진 메뉴(토스 ID 없음)가 토스 메뉴와 같은 이름이면 합칩니다.
+ * 토스 메뉴에 레시피가 없으면 레시피를 옮기고, 중복 메뉴는 삭제합니다.
+ */
+async function mergeDuplicateMenus(db: D1Database): Promise<{ from: string; into: string }[]> {
+  const menus = await repo.listMenuItems(db);
+  const recipes = await repo.listRecipes(db);
+  const tossMenus = menus.filter((m) => m.toss_item_id);
+  const merged: { from: string; into: string }[] = [];
+  for (const dup of menus.filter((m) => !m.toss_item_id)) {
+    const target = tossMenus.find((t) => normalizeMenuName(t.name) === normalizeMenuName(dup.name));
+    if (!target) continue;
+    const stmts: D1PreparedStatement[] = [];
+    if (!recipes.some((r) => r.menu_item_id === target.id)) {
+      stmts.push(db.prepare('UPDATE recipe_lines SET menu_item_id = ? WHERE menu_item_id = ?').bind(target.id, dup.id));
+    }
+    stmts.push(db.prepare('DELETE FROM menu_items WHERE id = ?').bind(dup.id));
+    await db.batch(stmts);
+    merged.push({ from: dup.name, into: target.name });
+  }
+  return merged;
 }

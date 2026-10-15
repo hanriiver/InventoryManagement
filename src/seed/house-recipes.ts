@@ -8,7 +8,7 @@ import type { BaseUnit, Supplier } from '../types';
 
 export interface SeedIngredient {
   name: string;
-  category: 'liquor' | 'fruit' | 'syrup' | 'etc';
+  category: 'liquor' | 'fruit' | 'syrup' | 'beer' | 'etc';
   unit: BaseUnit;
   container_size: number;
   container_label: string;
@@ -58,16 +58,21 @@ export const HOUSE_INGREDIENTS: SeedIngredient[] = [
   mixer('사워 믹서', 1000, '사워믹서'),
   mixer('크랜베리 주스', 1000, '크랜베리주스', 'etc'),
   mixer('우유', 1000, '우유', 'etc'),
+  // 맥주 (캔/병 개수)
+  { name: 'IPA', category: 'beer', unit: 'ea', container_size: 1, container_label: '개', reorder_point: 6, order_alias: 'IPA' },
+  { name: '라거', category: 'beer', unit: 'ea', container_size: 1, container_label: '개', reorder_point: 6, order_alias: '라거' },
+  { name: '기네스', category: 'beer', unit: 'ea', container_size: 1, container_label: '개', reorder_point: 6, order_alias: '기네스' },
   // 과일 (쿠팡 자동주문 예정)
   { name: '레몬', category: 'fruit', unit: 'ea', container_size: 1, container_label: '개', yield_ml: 40, reorder_point: 5, order_alias: '레몬', supplier: 'coupang' },
   { name: '라임', category: 'fruit', unit: 'ea', container_size: 1, container_label: '개', yield_ml: 20, reorder_point: 10, order_alias: '라임', supplier: 'coupang' },
 ];
 
 const ml = (ingredient: string, amount: number) => ({ ingredient, amount, unit: 'ml' as const });
+const ea = (ingredient: string, amount = 1) => ({ ingredient, amount, unit: 'ea' as const });
 
 export const HOUSE_RECIPES: SeedRecipe[] = [
   // 드랍 앤 밤
-  { menu: '아이리시 카밤', lines: [ml('제임슨', 15), ml('베일리스', 15)] },
+  { menu: '아이리시 카밤', lines: [ml('제임슨', 15), ml('베일리스', 15), ea('기네스')] },
   // 진 베이스
   { menu: '진토닉', lines: [ml('고든스 진', 45), ml('레몬', 10)] },
   { menu: '진피즈', lines: [ml('고든스 진', 45), ml('레몬', 30), ml('설탕 시럽', 10)] },
@@ -90,8 +95,29 @@ export const HOUSE_RECIPES: SeedRecipe[] = [
   { menu: '마가리타', lines: [ml('호세쿠엘보 실버', 45), ml('트리플 섹', 15), ml('라임', 15)] },
 ];
 
+/**
+ * 맥주가 들어가는 메뉴: 토스 메뉴 이름으로 판단 (위스키 한 샷 30ml)
+ * - 보일러메이커 + IPA → 짐빔 라이 30ml + IPA 1개
+ * - 보일러메이커 + 라거 → 짐빔 화이트 30ml + 라거 1개
+ * - 그 외 이름에 IPA / 라거 / 기네스 → 그 맥주 1개
+ */
+export function beerRecipe(menuName: string): SeedRecipe['lines'] | null {
+  const n = menuName.replace(/\s+/g, '').toLowerCase();
+  const ipa = n.includes('ipa');
+  const lager = n.includes('라거');
+  if (n.includes('보일러')) {
+    if (ipa) return [ml('짐빔 라이', 30), ea('IPA')];
+    if (lager) return [ml('짐빔 화이트', 30), ea('라거')];
+    return null;
+  }
+  if (n.includes('카밤')) return null;
+  if (ipa) return [ea('IPA')];
+  if (lager) return [ea('라거')];
+  if (n.includes('기네스')) return [ea('기네스')];
+  return null;
+}
+
 /** 레시피 문서에 양이 없어 입력이 필요한 항목 */
 export const HOUSE_RECIPE_TODO = [
-  '아이리시 카밤: 기네스 양 (잔의 70%) — 기네스를 캔/병 단위로 관리하려면 재료 추가 후 레시피에 1개로 넣기',
-  '보일러메이커: 짐빔 화이트·라이 한 샷 양과 맥주(앰버 라거·IPA) — 토스 메뉴 이름에 맞춰 레시피 입력',
+  '보일러메이커: 토스 메뉴 이름에 IPA/라거가 없으면(예: "보일러메이커" 하나에 맥주를 옵션으로 고름) 자동으로 못 넣습니다 — 토스에 어떻게 등록돼 있는지 알려 주세요',
 ];

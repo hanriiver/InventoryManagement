@@ -252,6 +252,11 @@ $('#btn-seed').addEventListener('click', () => {
       `✅ 재료 새로 추가 ${r.ingredientsAdded.length}개${r.ingredientsAdded.length ? `: ${r.ingredientsAdded.join(', ')}` : ''}`,
       `✅ 가게 레시피 ${r.recipesSet.length}개${r.recipesSkipped.length ? ` (이미 있어서 건너뜀: ${r.recipesSkipped.join(', ')})` : ''}`,
     ];
+    if (r.merged.length) lines.push('', `🔗 따로 생겼던 메뉴를 토스 메뉴로 합침: ${r.merged.map((m) => `${m.from} → ${m.into}`).join(', ')}`);
+    if (r.beer.length) {
+      lines.push('', `🍺 맥주 메뉴 ${r.beer.length}개`);
+      r.beer.forEach((b) => lines.push(`  · ${b.menu}: ${b.summary}`));
+    }
     if (r.whisky.length) {
       lines.push('', `🥃 위스키 자동 등록 ${r.whisky.length}개 (700ml 병, 한 잔 30ml)`);
       r.whisky.forEach((w) => lines.push(`  · ${w.menu} → ${w.ingredient} ${w.amount}${w.note ? ` (${w.note})` : ''}`));

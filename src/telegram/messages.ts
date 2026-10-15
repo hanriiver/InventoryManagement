@@ -37,7 +37,7 @@ export function stockListText(ingredients: Ingredient[]): string {
   if (!ingredients.length) return '등록된 재료가 없습니다. 관리자 웹에서 재료를 먼저 등록하세요.';
   const groups = new Map<string, Ingredient[]>();
   for (const i of ingredients) groups.set(i.category, [...(groups.get(i.category) ?? []), i]);
-  const label: Record<string, string> = { liquor: '🍾 술', fruit: '🍋 과일', syrup: '🍯 시럽', etc: '📦 기타' };
+  const label: Record<string, string> = { liquor: '🍾 술', beer: '🍺 맥주', fruit: '🍋 과일', syrup: '🍯 시럽', etc: '📦 기타' };
   const out: string[] = [];
   for (const [cat, list] of groups) {
     out.push(`[${label[cat] ?? cat}]`, ...list.map(stockLine), '');
