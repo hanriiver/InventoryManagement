@@ -212,6 +212,22 @@ admin.put('/menu-items/:id/recipe', async (c) => {
   return c.json({ ok: true });
 });
 
+// 메뉴·레시피·재료·재고 기록 전부 삭제 (토스 주문 기록과 설정은 유지 → 지난 주문이 다시 차감되지 않음)
+admin.post('/reset', async (c) => {
+  const { confirm } = await c.req.json<{ confirm?: string }>().catch(() => ({ confirm: undefined }));
+  if (confirm !== '초기화') throw new Error("확인 문구 '초기화'가 필요합니다");
+  const db = c.env.DB;
+  await db.batch([
+    db.prepare('DELETE FROM recipe_lines'),
+    db.prepare('DELETE FROM stock_movements'),
+    db.prepare('DELETE FROM purchase_orders'),
+    db.prepare('DELETE FROM unmapped_items'),
+    db.prepare('DELETE FROM menu_items'),
+    db.prepare('DELETE FROM ingredients'),
+  ]);
+  return c.json({ ok: true });
+});
+
 // 가게 레시피(문서 기준) 한 번에 등록: ?overwrite=1 이면 기존 레시피도 덮어씀
 admin.post('/seed/house-recipes', async (c) => c.json(await seedHouseRecipes(c.env, c.req.query('overwrite') === '1')));
 

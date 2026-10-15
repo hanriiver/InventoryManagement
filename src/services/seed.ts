@@ -82,7 +82,7 @@ export async function seedHouseRecipes(env: Env, overwrite = false): Promise<See
 
   // 1) 가게 레시피 (토스에 없으면 메뉴를 만듦)
   for (const r of HOUSE_RECIPES) {
-    let menu = findMenu(r.menu);
+    let menu = findMenu(r.menu, r.aliases);
     if (!menu) {
       menu = (await db.prepare('INSERT INTO menu_items (name) VALUES (?) RETURNING *').bind(r.menu).first<MenuItem>())!;
       menus.push(menu);

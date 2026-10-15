@@ -19,14 +19,10 @@ const can = (name: string): SeedIngredient => ({
 export const CLASSIC_INGREDIENTS: SeedIngredient[] = [
   liquor('잭다니엘', '잭다니엘'),
   liquor('블루 큐라소', '블루큐라소'),
-  liquor('피치 리큐르', '피치트리'),
-  liquor('아마레또', '아마레또'),
   liquor('아페롤', '아페롤'),
   liquor('예거마이스터', '예거마이스터'),
   liquor('말리부', '말리부'),
   juice('오렌지 주스', '오렌지주스'),
-  juice('파인애플 주스', '파인애플주스'),
-  juice('자몽 주스', '자몽주스'),
   juice('코코넛 크림', '코코넛크림'),
   can('콜라'),
   can('사이다'),
@@ -41,14 +37,11 @@ const ea = (ingredient: string, amount = 1) => ({ ingredient, amount, unit: 'ea'
 
 export const CLASSIC_RECIPES: (SeedRecipe & { aliases?: string[] })[] = [
   // 위스키 칵테일
-  { menu: '올드 패션드', aliases: ['올드패션', '올드 패션'], lines: [ml('짐빔 화이트', 45), ml('설탕 시럽', 10)] },
-  { menu: '위스키 사워', aliases: ['버번 사워'], lines: [ml('짐빔 화이트', 45), ml('레몬', 25), ml('설탕 시럽', 15)] },
   { menu: '맨해튼', aliases: ['맨하탄'], lines: [ml('짐빔 라이', 50), ml('마티니 로쏘', 20)] },
-  { menu: '갓파더', lines: [ml('짐빔 화이트', 35), ml('아마레또', 35)] },
   { menu: '잭콕', lines: [ml('잭다니엘', 30), ea('콜라')] },
   // 보드카
   { menu: '스크류 드라이버', aliases: ['스크류드라이버'], lines: [ml('티토스', 45), ml('오렌지 주스', 90)] },
-  { menu: '섹스 온 더 비치', aliases: ['섹스온더비치'], lines: [ml('티토스', 40), ml('피치 리큐르', 20), ml('크랜베리 주스', 40), ml('오렌지 주스', 40)] },
+  { menu: '섹스 온 더 비치', aliases: ['섹스온더비치'], lines: [ml('티토스', 40), ml('피치트리', 20), ml('크랜베리 주스', 40), ml('오렌지 주스', 40)] },
   { menu: '에스프레소 마티니', lines: [ml('티토스', 50), ml('깔루아', 30)] },
   { menu: '모스코 뮬', aliases: ['모스크바 뮬', '모스코뮬'], lines: [ml('티토스', 45), ml('라임', 15), ea('진저에일')] },
   // 진
@@ -60,16 +53,11 @@ export const CLASSIC_RECIPES: (SeedRecipe & { aliases?: string[] })[] = [
   // 데킬라
   { menu: '데킬라 샷', lines: [ml('호세쿠엘보 실버', 30)] },
   // 리큐르
-  { menu: '깔루아 밀크', aliases: ['깔루아밀크'], lines: [ml('깔루아', 30), ml('우유', 90)] },
-  { menu: '미도리 사워', lines: [ml('미도리', 45), ml('사워 믹서', 60)] },
-  { menu: '롱 아일랜드 아이스티', aliases: ['롱아일랜드', '롱 아일랜드'], lines: [ml('티토스', 15), ml('고든스 진', 15), ml('바카디 화이트 럼', 15), ml('호세쿠엘보 실버', 15), ml('트리플 섹', 15), ml('레몬', 25), ml('설탕 시럽', 15), ea('콜라')] },
   { menu: '아페롤 스프리츠', lines: [ml('아페롤', 60), ea('탄산수')] },
   { menu: '예거밤', lines: [ml('예거마이스터', 30), ea('레드불')] },
   // 논알콜
-  { menu: '레모네이드', aliases: ['레몬에이드'], lines: [ml('레몬', 30), ml('설탕 시럽', 20), ea('탄산수')] },
   { menu: '라임에이드', lines: [ml('라임', 30), ml('설탕 시럽', 20), ea('탄산수')] },
   { menu: '자몽에이드', lines: [ml('자몽 주스', 90), ml('설탕 시럽', 10), ea('탄산수')] },
-  { menu: '버진 모히또', aliases: ['논알콜 모히또', '무알콜 모히또'], lines: [ml('라임', 20), ml('설탕 시럽', 15), ea('탄산수')] },
   { menu: '오렌지 주스', lines: [ml('오렌지 주스', 200)] },
   { menu: '크랜베리 주스', lines: [ml('크랜베리 주스', 200)] },
   { menu: '콜라', aliases: ['코카콜라', '코크'], lines: [ea('콜라')] },

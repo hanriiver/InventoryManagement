@@ -525,6 +525,15 @@ $('#btn-baseline').addEventListener('click', () => {
 });
 $('#btn-sync').addEventListener('click', () => run(async () => output(await api('/toss/sync', { method: 'POST' }))));
 $('#btn-toss-sample').addEventListener('click', () => run(async () => output(await api('/toss/orders?size=3'))));
+$('#btn-reset').addEventListener('click', () => {
+  const typed = prompt('메뉴, 레시피, 재료, 재고 기록, 발주서를 모두 지웁니다.\n(토스 주문 기록과 설정은 남아서 지난 주문이 다시 차감되지는 않습니다)\n\n진행하려면 "초기화"라고 입력하세요.');
+  if (typed === null) return;
+  run(async () => {
+    await api('/reset', { method: 'POST', body: { confirm: typed.trim() } });
+    toast('초기화했습니다. 메뉴·레시피 탭에서 토스 메뉴 불러오기 → 우리 가게 레시피 넣기를 눌러 주세요');
+    loadSettings();
+  });
+});
 $('#btn-logout').addEventListener('click', () => { try { localStorage.removeItem('adminToken'); } catch {} token = ''; showLogin(); });
 
 $('#manual-sale').addEventListener('submit', (e) => {
