@@ -324,12 +324,14 @@ admin.get('/orders', async (c) => {
   return c.json(
     results.map(({ raw, ...r }) => {
       let items = '';
+      let ordered_at: string | null = null;
       try {
         const o = normalizeOrder(JSON.parse(raw));
         items = o.items.map((i) => (i.quantity === 1 ? i.name : `${i.name}×${i.quantity}`)).join(', ');
+        ordered_at = o.orderedAt ?? null;
       } catch {}
       const applied = r.status === 'BASELINE' ? 'baseline' : Math.abs(r.net) > 1e-6 ? 'deducted' : r.sale_lines > 0 ? 'restored' : 'none';
-      return { ...r, items, applied };
+      return { ...r, items, ordered_at, applied };
     }),
   );
 });
@@ -353,6 +355,18 @@ admin.get('/toss/catalog', async (c) => c.json(await new TossClient(c.env).listC
 
 // 실제 응답 필드 확인용 (normalize.ts 필드명 맞출 때 사용)
 admin.get('/toss/orders', async (c) => c.json(await new TossClient(c.env).listOrders(1, Number(c.req.query('size') ?? 5))));
+// 주문 상세: 토스에서 다시 조회해 해석 결과와 원본을 함께 (필드명 확인용)
+admin.get('/toss/orders/:orderId/detail', async (c) => {
+  const raw = await new TossClient(c.env).getOrder(c.req.param('orderId'));
+  let normalized: unknown = null;
+  let error: string | null = null;
+  try {
+    normalized = normalizeOrder(raw);
+  } catch (e) {
+    error = (e as Error).message;
+  }
+  return c.json({ normalized, error, raw });
+});
 admin.get('/toss/orders/:orderId/raw', async (c) => c.json(await new TossClient(c.env).getOrder(c.req.param('orderId'))));
 
 // ── 텔레그램 ─────────────────────────────────────────

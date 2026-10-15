@@ -7,10 +7,11 @@
  */
 export const ORDER_ID_KEYS = ['orderId', 'id', 'orderKey'];
 export const ORDER_STATE_KEYS = ['state', 'status', 'orderState', 'orderStatus'];
+export const ORDER_TIME_KEYS = ['orderedAt', 'createdAt', 'openedAt', 'paidAt', 'completedAt', 'createdDate', 'orderDate', 'createdDateTime'];
 export const ORDER_ITEMS_KEYS = ['lineItems', 'orderLineItems', 'items', 'orderItems', 'products', 'menus'];
 export const ITEM_ID_KEYS = ['catalogItemId', 'itemId', 'productId', 'menuId', 'id'];
 export const ITEM_NAME_KEYS = ['itemName', 'productName', 'menuName', 'name', 'title'];
-export const ITEM_QTY_KEYS = ['quantity', 'count', 'qty', 'amount'];
+export const ITEM_QTY_KEYS = ['quantity', 'count', 'qty']; // 'amount'는 금액일 수 있어 제외
 export const ITEM_CANCELED_QTY_KEYS = ['canceledQuantity', 'cancelledQuantity', 'cancelQuantity'];
 export const ITEM_OPTIONS_KEYS = ['options', 'optionItems', 'selectedOptions', 'modifiers', 'optionChoices'];
 export const LIST_KEYS = ['orders', 'content', 'items', 'list', 'records', 'data'];
@@ -35,6 +36,8 @@ export interface NormalizedOrder {
   state: string;
   status: OrderStatus;
   items: NormalizedItem[];
+  /** 주문 시각 (ISO). 응답에 없으면 null */
+  orderedAt?: string | null;
 }
 
 type Obj = Record<string, unknown>;
@@ -117,7 +120,7 @@ export function normalizeOrder(body: unknown): NormalizedOrder {
   const items = Array.isArray(rawItems)
     ? rawItems.map(normalizeItem).filter((x): x is NormalizedItem => x !== null)
     : [];
-  return { orderId, state, status: classifyStatus(state), items };
+  return { orderId, state, status: classifyStatus(state), items, orderedAt: parseTime(pick(o, ORDER_TIME_KEYS)) };
 }
 
 /** 주문 목록 응답에서 주문 배열 추출 */
@@ -147,4 +150,12 @@ export function findField(payload: unknown, key: string, depth = 4): string | nu
     if (r) return r;
   }
   return null;
+}
+
+/** ISO 문자열, epoch(초/밀리초) → ISO */
+export function parseTime(v: unknown): string | null {
+  if (v === undefined || v === null || v === '') return null;
+  const n = typeof v === 'number' ? v : /^\d+$/.test(String(v)) ? Number(v) : NaN;
+  const d = Number.isFinite(n) ? new Date(n < 1e12 ? n * 1000 : n) : new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }

@@ -118,3 +118,7 @@ dialog h3 { margin: 0 0 4px; font-size: 16px; }
 dialog .actions { margin-top: 12px; justify-content: flex-end; }
 .grow { flex: 1; }
 table.orders td:nth-child(1), table.orders td:nth-child(3), table.orders td:nth-child(4) { white-space: nowrap; }
+.order-row { cursor: pointer; }
+.order-row:hover td { background: var(--bg); }
+.order-detail td { background: var(--bg); font-size: 13px; line-height: 1.6; }
+.order-detail pre { white-space: pre-wrap; word-break: break-all; }

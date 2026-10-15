@@ -61,3 +61,18 @@ describe('telegram commands', () => {
     expect(parseCommand('안녕')).toBeNull();
   });
 });
+
+describe('order time and quantity', () => {
+  it('주문 시각: ISO / epoch 초 / epoch 밀리초', async () => {
+    const { parseTime } = await import('../src/toss/normalize');
+    expect(parseTime('2026-10-15T10:00:00Z')).toBe('2026-10-15T10:00:00.000Z');
+    expect(parseTime(1792058400)).toBe('2026-10-15T10:00:00.000Z');
+    expect(parseTime('1792058400000')).toBe('2026-10-15T10:00:00.000Z');
+    expect(parseTime('')).toBeNull();
+  });
+  it('amount(금액)를 수량으로 읽지 않음', () => {
+    const o = normalizeOrder({ id: 'X', state: 'COMPLETED', createdAt: 1792058400, lineItems: [{ itemName: '진토닉', amount: 15000 }] });
+    expect(o.items[0]!.quantity).toBe(1);
+    expect(o.orderedAt).toBe('2026-10-15T10:00:00.000Z');
+  });
+});

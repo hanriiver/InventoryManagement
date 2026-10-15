@@ -364,6 +364,7 @@ $('#menu-list').addEventListener('click', (e) => {
 const poStatus = { DRAFT: '발주 전', SENT: '발주 완료', RECEIVED: '입고 완료' };
 
 const orderStatusText = { COMPLETED: '완료', CANCELED: '취소', PENDING: '진행 중', BASELINE: '이전 주문' };
+const isoKst = (iso) => (iso ? kst(iso.replace('T', ' ').slice(0, 19)) : '');
 const appliedText = {
   deducted: '<span class="minus">차감됨</span>',
   restored: '<span class="plus">취소로 원복</span>',
@@ -380,10 +381,35 @@ async function loadOrders() {
       ? `${kst(base.replace('T', ' ').slice(0, 19))} 이후 완료된 주문부터 재고에 반영합니다. 마지막 동기화: ${status.settings.last_sync_at ? kst(status.settings.last_sync_at.replace('T', ' ').slice(0, 19)) : '-'}`
       : '<b>지금 동기화</b>를 누르면 기존 주문은 기록만 하고, 이후 새로 완료되는 주문부터 재고에서 뺍니다.';
   $('#order-rows').innerHTML = orders.map((o) => `
-    <tr><td>${kst(o.first_seen)}</td><td>${esc(o.items || '(항목 없음)')}</td>
-    <td>${orderStatusText[o.status] ?? esc(o.status)}</td><td>${appliedText[o.applied] ?? ''}</td></tr>`).join('')
+    <tr class="order-row" data-order="${esc(o.order_id)}">
+      <td>${o.ordered_at ? isoKst(o.ordered_at) : `<span class="muted">${kst(o.first_seen)} 확인</span>`}</td>
+      <td>${o.items ? esc(o.items) : '<span class="muted">눌러서 상세 보기</span>'}</td>
+      <td>${esc(o.state ?? '')}${o.status === 'BASELINE' ? ' <span class="muted">· 시작 전</span>' : ''}</td>
+      <td>${appliedText[o.applied] ?? ''}</td></tr>`).join('')
     || '<tr><td colspan="4" class="muted">아직 가져온 주문이 없습니다</td></tr>';
 }
+
+// 주문 줄을 누르면 토스에서 상세를 불러와 메뉴 해석 결과와 원본을 보여 줌
+$('#order-rows').addEventListener('click', (e) => {
+  const row = e.target.closest('.order-row');
+  if (!row) return;
+  const next = row.nextElementSibling;
+  if (next?.classList.contains('order-detail')) return next.remove();
+  run(async () => {
+    const d = await api(`/toss/orders/${encodeURIComponent(row.dataset.order)}/detail`);
+    const n = d.normalized;
+    const statusLabel = n ? ({ COMPLETED: '완료로 인식 → 재고 차감 대상', CANCELED: '취소로 인식', PENDING: '진행 중으로 인식 (차감 안 함)' })[n.status] : '';
+    const items = n?.items?.length
+      ? n.items.map((i) => `${esc(i.name)} ×${i.quantity}${i.options.length ? ` (${i.options.map((o) => esc(o.name)).join(', ')})` : ''}`).join('<br>')
+      : '<span class="minus">메뉴 항목을 읽지 못했습니다 — 아래 원본을 보내 주세요</span>';
+    row.insertAdjacentHTML('afterend', `<tr class="order-detail"><td colspan="4">
+      <div><b>상태:</b> ${esc(n?.state ?? '-')} ${statusLabel ? `(${statusLabel})` : ''}${d.error ? ` <span class="minus">${esc(d.error)}</span>` : ''}</div>
+      <div><b>주문 시각:</b> ${n?.orderedAt ? isoKst(n.orderedAt) : '<span class="muted">찾지 못함</span>'}</div>
+      <div><b>메뉴:</b><br>${items}</div>
+      <details><summary>원본 응답</summary><pre class="output">${esc(JSON.stringify(d.raw, null, 2))}</pre></details>
+    </td></tr>`);
+  });
+});
 
 $('#btn-sync-orders').addEventListener('click', () => run(async () => {
   const r = await api('/toss/sync', { method: 'POST' });
