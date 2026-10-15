@@ -244,6 +244,24 @@ async function importMenus(source) {
 $('#btn-import-catalog').addEventListener('click', () => run(() => importMenus('catalog')));
 $('#btn-import-orders').addEventListener('click', () => run(() => importMenus('orders')));
 
+$('#btn-seed').addEventListener('click', () => {
+  if (!confirm('레시피 문서의 재료와 레시피를 등록합니다.\n이미 있는 재료와 이미 입력한 레시피는 그대로 둡니다. 진행할까요?')) return;
+  run(async () => {
+    const r = await api('/seed/house-recipes', { method: 'POST' });
+    const lines = [
+      `재료 새로 추가 ${r.ingredientsAdded.length}개${r.ingredientsAdded.length ? `: ${r.ingredientsAdded.join(', ')}` : ''}`,
+      `레시피 입력 ${r.recipesSet.length}개${r.recipesSkipped.length ? ` · 이미 있어서 건너뜀: ${r.recipesSkipped.join(', ')}` : ''}`,
+    ];
+    if (r.menusCreated.length) lines.push(`⚠️ 토스 메뉴에서 같은 이름을 못 찾아 새로 만든 메뉴: ${r.menusCreated.join(', ')}\n   → 토스 메뉴 이름이 다르면 그 메뉴 이름을 토스와 똑같이 고쳐 주세요`);
+    lines.push('', '직접 확인/입력이 필요한 것:', ...r.todo.map((t) => `· ${t}`), '· 새로 추가된 재료는 재고 0이라, 재고 탭에서 "현재 양 입력"으로 실제 양을 넣어 주세요');
+    const out = $('#seed-output');
+    out.textContent = lines.join('\n');
+    out.hidden = false;
+    menuFilter = 'all';
+    loadMenus();
+  });
+});
+
 function recipeUnits(ingredientId) {
   const i = state.ingredients.find((x) => x.id === Number(ingredientId));
   if (!i) return ['ml'];

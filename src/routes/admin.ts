@@ -9,6 +9,7 @@ import { sendDailyReport } from '../services/report';
 import { markBaseline, syncOrderById, syncRecentOrders } from '../services/toss-sync';
 import { normalizeOrder } from '../toss/normalize';
 import { importMenusFromCatalog, importMenusFromOrders } from '../services/menu-import';
+import { seedHouseRecipes } from '../services/seed';
 import { TossClient, tossConfigured, tossMenuConfigured } from '../toss/client';
 import { setCommands, setWebhook, telegramConfigured } from '../telegram/api';
 
@@ -210,6 +211,9 @@ admin.put('/menu-items/:id/recipe', async (c) => {
   ]);
   return c.json({ ok: true });
 });
+
+// 가게 레시피(문서 기준) 한 번에 등록: ?overwrite=1 이면 기존 레시피도 덮어씀
+admin.post('/seed/house-recipes', async (c) => c.json(await seedHouseRecipes(c.env, c.req.query('overwrite') === '1')));
 
 // 토스 연동 전 테스트용 수동 판매: { menu_item_id, quantity }
 admin.post('/sales/manual', async (c) => {
