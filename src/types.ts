@@ -36,7 +36,10 @@ export interface MenuItem {
   id: number;
   name: string;
   toss_item_id: string | null;
+  /** 0이면 재고 차감 안 함 (음식 등). 판매돼도 알림 없이 무시 */
   active: number;
+  kind?: string;
+  category?: string | null;
 }
 
 export interface RecipeLine {

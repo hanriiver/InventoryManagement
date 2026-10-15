@@ -5,6 +5,8 @@ import type { Env } from '../types';
  * 주문 단건 조회 경로는 REST 관례로 추정한 값이라, 문서와 다르면 여기만 고치면 됩니다.
  */
 export const TOSS_PATHS = {
+  // 카탈로그 경로도 다른 API(/order/orders, /payment/payments)와 같은 패턴으로 추정
+  listCatalogItems: (merchantId: string) => `/merchants/${merchantId}/catalog/items`,
   listOrders: (merchantId: string) => `/merchants/${merchantId}/order/orders`,
   getOrder: (merchantId: string, orderId: string) =>
     `/merchants/${merchantId}/order/orders/${encodeURIComponent(orderId)}`,
@@ -46,6 +48,10 @@ export class TossClient {
 
   listOrders(page = 1, size = 100): Promise<unknown> {
     return this.request(TOSS_PATHS.listOrders(this.merchantId), { page, size, sortOrder: 'DESC' });
+  }
+
+  listCatalogItems(page = 1, size = 500): Promise<unknown> {
+    return this.request(TOSS_PATHS.listCatalogItems(this.merchantId), { page, size });
   }
 
   getOrder(orderId: string): Promise<unknown> {

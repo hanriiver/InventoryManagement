@@ -6,6 +6,7 @@ let token = '';
 try { token = localStorage.getItem('adminToken') || ''; } catch {}
 
 const state = { ingredients: [], menus: [] };
+const reasonLabel = { SALE: '판매', CANCEL: '취소', RESTOCK: '입고', ADJUST: '현재 양 입력', WASTE: '폐기' };
 
 async function api(path, opts = {}) {
   const res = await fetch('/api' + path, {
@@ -55,37 +56,97 @@ const loaders = {
 
 // ── 재고 ────────────────────────────────────────────
 const unitLabel = (i) => (i.unit === 'ml' ? i.container_label : i.container_label || '개');
+const statusText = { empty: '재고 없음', low: '발주 필요', ok: '충분' };
+const kst = (utc) => new Date(String(utc).replace(' ', 'T') + 'Z')
+  .toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+
+/** 수량 입력 창. ml 재료는 "병 + ml", 나머지는 개수. 결과는 API에 보낼 문자열 */
+function askQuantity(ing, title, hint) {
+  const dlg = $('#qty-dialog');
+  const f = $('#qty-form');
+  const isMl = ing.unit === 'ml' && ing.container_size > 1;
+  $('#qty-title').textContent = title;
+  $('#qty-hint').textContent = hint || '';
+  $('#qty-label').textContent = isMl ? ing.container_label : unitLabel(ing);
+  $('.ml-extra', f).hidden = !isMl;
+  f.bottles.value = '';
+  f.ml.value = '';
+  dlg.showModal();
+  f.bottles.focus();
+  return new Promise((resolve) => {
+    dlg.addEventListener('close', () => {
+      if (dlg.returnValue !== 'ok') return resolve(null);
+      const b = Number(f.bottles.value || 0);
+      const ml = Number(f.ml.value || 0);
+      if (!b && !ml && f.bottles.value === '' && f.ml.value === '') return resolve(null);
+      resolve(isMl ? `${b}병+${ml}ml` : String(b));
+    }, { once: true });
+  });
+}
 
 async function loadStock() {
   state.ingredients = await api('/ingredients');
-  $('#stock-rows').innerHTML = state.ingredients.length
-    ? state.ingredients.map((i) => `
-      <tr class="${i.low ? 'low' : ''}">
-        <td>${esc(i.name)}</td>
-        <td>${esc(i.display)}</td>
-        <td>${esc(i.reorder_point)}${esc(unitLabel(i))} 이하</td>
-        <td class="row">
-          <button class="small secondary" data-act="restock" data-id="${i.id}">입고</button>
-          <button class="small secondary" data-act="count" data-id="${i.id}">실사</button>
-          <button class="small danger" data-act="waste" data-id="${i.id}">폐기</button>
-        </td>
-      </tr>`).join('')
-    : '<tr><td colspan="4" class="muted">재료 탭에서 재료를 먼저 등록하세요.</td></tr>';
+  const list = state.ingredients;
+  const order = { empty: 0, low: 1, ok: 2 };
+  const sorted = [...list].sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name));
+  const count = (st) => list.filter((i) => i.status === st).length;
+  $('#stock-summary').innerHTML = list.length
+    ? `<span>전체 ${list.length}</span><span class="danger">재고 없음 ${count('empty')}</span><span class="warn">발주 필요 ${count('low')}</span><span>충분 ${count('ok')}</span>`
+    : '';
+  $('#stock-cards').innerHTML = sorted.length ? sorted.map(stockCard).join('') : '<p class="muted">재료 탭에서 재료를 먼저 등록하세요.</p>';
 }
 
-$('#stock-rows').addEventListener('click', (e) => {
+function stockCard(i) {
+  const isMl = i.unit === 'ml' && i.container_size > 1;
+  const sub = isMl && i.status !== 'empty' ? `<small>${i.containers}${esc(i.container_label)}</small>` : '';
+  const ref = `발주 기준 ${esc(i.reorder_point)}${esc(unitLabel(i))} 이하${i.par_level != null ? ` · 적정 ${esc(i.par_level)}${esc(unitLabel(i))}` : ''}`;
+  const notice = i.status === 'empty'
+    ? `<div class="notice">${i.shortage ? `장부상 ${esc(i.shortage)} 더 사용됨. ` : ''}지금 남은 양을 <b>현재 양 입력</b>으로 맞춰 주세요.</div>`
+    : '';
+  return `
+    <div class="card ${i.status}" data-id="${i.id}">
+      <div class="card-head"><span class="card-name">${esc(i.name)}</span><span class="chip ${i.status}">${statusText[i.status]}</span></div>
+      <div class="amount">${esc(i.display)}${sub}</div>
+      <div class="gauge"><i style="width:${i.gauge.percent}%"></i><b style="left:${i.gauge.reorderPercent}%" title="발주 기준"></b></div>
+      <div class="muted">${ref}</div>
+      ${notice}
+      <div class="row">
+        <button class="small" data-act="restock">입고</button>
+        <button class="small secondary" data-act="count">현재 양 입력</button>
+        <button class="small secondary" data-act="waste">폐기</button>
+        <button class="small secondary" data-act="history">기록</button>
+      </div>
+      <div class="card-history" hidden></div>
+    </div>`;
+}
+
+$('#stock-cards').addEventListener('click', async (e) => {
   const b = e.target.closest('button[data-act]');
   if (!b) return;
-  const ing = state.ingredients.find((i) => i.id === Number(b.dataset.id));
-  const prompts = {
-    restock: `${ing.name} 입고 수량 (${unitLabel(ing)} 단위${ing.unit === 'ml' ? ', 또는 350ml' : ''})`,
-    count: `${ing.name} 실제 남은 양 (예: 1.5${ing.unit === 'ml' ? ' 또는 1050ml' : ''})`,
-    waste: `${ing.name} 폐기 수량`,
+  const card = b.closest('.card');
+  const ing = state.ingredients.find((i) => i.id === Number(card.dataset.id));
+  const act = b.dataset.act;
+  if (act === 'history') {
+    const box = $('.card-history', card);
+    if (!box.hidden) return (box.hidden = true);
+    return run(async () => {
+      const mv = await api(`/movements?ingredient_id=${ing.id}&limit=10`);
+      box.innerHTML = mv.length
+        ? mv.map((m) => `<div><span>${kst(m.created_at)} ${reasonLabel[m.reason] ?? ''}</span><span class="${m.delta > 0 ? 'plus' : 'minus'}">${esc(m.delta_display)}</span><span>→ ${esc(m.balance_display)}</span></div>`).join('')
+        : '<div class="muted">기록 없음</div>';
+      box.hidden = false;
+    });
+  }
+  const isMl = ing.unit === 'ml' && ing.container_size > 1;
+  const titles = {
+    restock: [`${ing.name} 입고`, isMl ? `새로 들어온 양 (예: 2병, 또는 0병 + 350ml)` : '새로 들어온 개수'],
+    count: [`${ing.name} 현재 양 입력`, isMl ? `지금 실제로 남은 양 (예: 1병 + 300ml, 따놓은 병은 ml로)` : '지금 실제로 남은 개수'],
+    waste: [`${ing.name} 폐기`, '버린 양'],
   };
-  const q = prompt(prompts[b.dataset.act]);
-  if (!q) return;
+  const q = await askQuantity(ing, ...titles[act]);
+  if (q === null) return;
   run(async () => {
-    const r = await api(`/ingredients/${ing.id}/${b.dataset.act}`, { method: 'POST', body: { quantity: q } });
+    const r = await api(`/ingredients/${ing.id}/${act}`, { method: 'POST', body: { quantity: q } });
     toast(`${r.name}: ${r.display}`);
     loadStock();
   });
@@ -165,11 +226,23 @@ $('#ing-rows').addEventListener('click', (e) => {
 });
 
 // ── 메뉴 / 레시피 ───────────────────────────────────
+let menuFilter = 'todo';
+let openMenuId = null;
+
 $('#menu-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(e.target));
   run(async () => { await api('/menu-items', { method: 'POST', body }); e.target.reset(); loadMenus(); });
 });
+
+async function importMenus(source) {
+  const r = await api(`/toss/import-menus?source=${source}`, { method: 'POST' });
+  toast(`메뉴 ${r.total}개 확인 · 새로 추가 ${r.added.length}개 · 갱신 ${r.updated}개`);
+  menuFilter = 'todo';
+  loadMenus();
+}
+$('#btn-import-catalog').addEventListener('click', () => run(() => importMenus('catalog')));
+$('#btn-import-orders').addEventListener('click', () => run(() => importMenus('orders')));
 
 function recipeUnits(ingredientId) {
   const i = state.ingredients.find((x) => x.id === Number(ingredientId));
@@ -189,22 +262,57 @@ function recipeLineHtml(line = {}) {
   </div>`;
 }
 
+const menuStateText = { todo: '레시피 필요', done: '레시피 완료', ignored: '차감 안 함' };
+
 async function loadMenus() {
   [state.ingredients, state.menus] = await Promise.all([api('/ingredients'), api('/menu-items')]);
-  $('#menu-list').innerHTML = state.menus.map((m) => `
-    <div class="menu-card" data-menu="${m.id}">
-      <header>
-        <strong>${esc(m.name)}</strong>
-        <span class="muted">${m.toss_item_id ? `토스 ID ${esc(m.toss_item_id)}` : '이름 매칭'}</span>
-        <button class="small danger" data-del-menu>삭제</button>
-      </header>
-      <div class="lines">${m.recipe.map(recipeLineHtml).join('')}</div>
-      <div class="row" style="margin-top:8px">
-        <button type="button" class="small secondary" data-add-line>+ 재료</button>
-        <button type="button" class="small" data-save-recipe>레시피 저장</button>
-      </div>
-    </div>`).join('') || '<p class="muted">등록된 메뉴가 없습니다.</p>';
+  renderMenus();
 }
+
+function renderMenus() {
+  const counts = { todo: 0, done: 0, ignored: 0 };
+  state.menus.forEach((m) => counts[m.state]++);
+  $('#menu-filters').innerHTML = ['todo', 'done', 'ignored', 'all']
+    .map((f) => `<button data-filter="${f}" class="${menuFilter === f ? 'active' : ''}">${f === 'all' ? `전체 ${state.menus.length}` : `${menuStateText[f]} ${counts[f]}`}</button>`)
+    .join('');
+  const q = $('#menu-search').value.trim().toLowerCase();
+  const list = state.menus.filter((m) => (menuFilter === 'all' || m.state === menuFilter) && (!q || m.name.toLowerCase().includes(q)));
+  if (!state.menus.length) {
+    $('#menu-list').innerHTML = '<p class="muted">아직 메뉴가 없습니다. <b>토스 메뉴 불러오기</b>를 눌러 주세요.</p>';
+    return;
+  }
+  $('#menu-list').innerHTML = list.map((m) => `
+    <div class="menu-row" data-menu="${m.id}">
+      <div class="menu-head">
+        <div class="grow">
+          <div>${esc(m.name)} ${m.kind === 'option' ? '<span class="muted">(옵션)</span>' : ''}</div>
+          <div class="sub ${m.state === 'todo' ? 'todo' : ''}">${m.state === 'done' ? esc(m.recipe_summary) : m.state === 'ignored' ? '재고 차감 안 함' : '레시피를 입력해 주세요'}${m.category ? ` · ${esc(m.category)}` : ''}</div>
+        </div>
+        <span class="chip ${m.state === 'done' ? 'ok' : m.state === 'todo' ? 'low' : ''}">${menuStateText[m.state]}</span>
+      </div>
+      ${openMenuId === m.id ? menuBody(m) : ''}
+    </div>`).join('') || '<p class="muted">해당하는 메뉴가 없습니다.</p>';
+}
+
+function menuBody(m) {
+  return `<div class="menu-body">
+    <div class="lines">${m.recipe.map(recipeLineHtml).join('')}</div>
+    <div class="row">
+      <button type="button" class="small secondary" data-add-line>+ 재료</button>
+      <button type="button" class="small" data-save-recipe>레시피 저장</button>
+      <span class="grow"></span>
+      <button type="button" class="small secondary" data-toggle-active>${m.active ? '재고 차감 안 함으로' : '재고 차감 다시 켜기'}</button>
+      <button type="button" class="small danger" data-del-menu>삭제</button>
+    </div>
+    <div class="muted" style="margin-top:6px">${m.toss_item_id ? `토스 상품 ID ${esc(m.toss_item_id)}` : '토스 ID 없음 · 이름으로 매칭'}</div>
+  </div>`;
+}
+
+$('#menu-search').addEventListener('input', renderMenus);
+$('#menu-filters').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-filter]');
+  if (b) { menuFilter = b.dataset.filter; renderMenus(); }
+});
 
 $('#menu-list').addEventListener('change', (e) => {
   if (e.target.dataset.f !== 'ingredient_id') return;
@@ -213,21 +321,38 @@ $('#menu-list').addEventListener('change', (e) => {
 });
 
 $('#menu-list').addEventListener('click', (e) => {
-  const card = e.target.closest('[data-menu]');
-  if (!card) return;
-  const id = card.dataset.menu;
+  const row = e.target.closest('[data-menu]');
+  if (!row) return;
+  const id = Number(row.dataset.menu);
+  const m = state.menus.find((x) => x.id === id);
+  if (e.target.closest('.menu-head')) {
+    openMenuId = openMenuId === id ? null : id;
+    renderMenus();
+    if (openMenuId && !m.recipe.length && state.ingredients.length) $('.lines', $(`[data-menu="${id}"]`)).insertAdjacentHTML('beforeend', recipeLineHtml());
+    return;
+  }
   if (e.target.matches('[data-add-line]')) {
-    if (!state.ingredients.length) return toast('재료를 먼저 등록하세요');
-    $('.lines', card).insertAdjacentHTML('beforeend', recipeLineHtml());
+    if (!state.ingredients.length) return toast('재료 탭에서 재료를 먼저 등록하세요');
+    $('.lines', row).insertAdjacentHTML('beforeend', recipeLineHtml());
   }
   if (e.target.matches('[data-rm]')) e.target.closest('.recipe-line').remove();
   if (e.target.matches('[data-save-recipe]')) {
-    const lines = $$('.recipe-line', card).map((l) => ({
-      ingredient_id: Number($('[data-f=ingredient_id]', l).value),
-      amount: Number($('[data-f=amount]', l).value),
-      unit: $('[data-f=unit]', l).value,
-    }));
-    run(async () => { await api(`/menu-items/${id}/recipe`, { method: 'PUT', body: { lines } }); toast('레시피를 저장했습니다'); });
+    const lines = $$('.recipe-line', row)
+      .map((l) => ({
+        ingredient_id: Number($('[data-f=ingredient_id]', l).value),
+        amount: Number($('[data-f=amount]', l).value),
+        unit: $('[data-f=unit]', l).value,
+      }))
+      .filter((l) => l.amount > 0);
+    run(async () => {
+      await api(`/menu-items/${id}/recipe`, { method: 'PUT', body: { lines } });
+      toast(`${m.name} 레시피를 저장했습니다`);
+      openMenuId = null;
+      loadMenus();
+    });
+  }
+  if (e.target.matches('[data-toggle-active]')) {
+    run(async () => { await api(`/menu-items/${id}`, { method: 'PATCH', body: { active: !m.active } }); loadMenus(); });
   }
   if (e.target.matches('[data-del-menu]') && confirm('메뉴를 삭제할까요?')) {
     run(async () => { await api(`/menu-items/${id}`, { method: 'DELETE' }); loadMenus(); });
@@ -235,28 +360,37 @@ $('#menu-list').addEventListener('click', (e) => {
 });
 
 // ── 기록 / 발주 ─────────────────────────────────────
-const reasonLabel = { SALE: '판매', CANCEL: '취소', RESTOCK: '입고', ADJUST: '실사', WASTE: '폐기' };
+
 const poStatus = { DRAFT: '발주 전', SENT: '발주 완료', RECEIVED: '입고 완료' };
 
 async function loadHistory() {
   const [unmapped, pos, mv] = await Promise.all([api('/unmapped'), api('/purchase-orders'), api('/movements?limit=200')]);
   $('#unmapped-rows').innerHTML = unmapped.map((u) => `
     <tr><td>${esc(u.name)}</td><td>${esc(u.toss_item_id ?? '-')}</td><td>${esc(u.count)}</td>
-    <td><button class="small secondary" data-unmapped="${esc(u.key)}">확인</button></td></tr>`).join('')
+    <td class="row"><button class="small" data-register="${esc(u.key)}">메뉴로 등록</button>
+    <button class="small secondary" data-unmapped="${esc(u.key)}">무시</button></td></tr>`).join('')
     || '<tr><td colspan="4" class="muted">없음</td></tr>';
   $('#po-list').innerHTML = pos.map((p) => `
-    <div class="po"><strong>#${p.id}</strong> <span class="muted">${esc(p.created_at)} · ${poStatus[p.status] ?? esc(p.status)}</span>
+    <div class="po"><strong>#${p.id}</strong> <span class="muted">${kst(p.created_at)} · ${poStatus[p.status] ?? esc(p.status)}</span>
     <pre>${p.lines.map((l) => `${esc(l.name)} ${esc(l.qty)}`).join('\n')}</pre></div>`).join('')
     || '<p class="muted">없음</p>';
   $('#mv-rows').innerHTML = mv.map((m) => `
-    <tr><td>${esc(m.created_at)}</td><td>${esc(m.ingredient_name)}</td>
-    <td>${m.delta > 0 ? '+' : ''}${Math.round(m.delta * 100) / 100}</td>
-    <td>${reasonLabel[m.reason] ?? esc(m.reason)}${m.note ? ` · ${esc(m.note)}` : ''}</td><td>${esc(m.ref ?? '')}</td></tr>`).join('');
+    <tr><td>${kst(m.created_at)}</td><td>${esc(m.ingredient_name)}</td>
+    <td class="${m.delta > 0 ? 'plus' : 'minus'}">${esc(m.delta_display)}</td>
+    <td>${esc(m.balance_display)}</td>
+    <td>${reasonLabel[m.reason] ?? esc(m.reason)}${m.note ? ` · ${esc(m.note)}` : ''}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="muted">없음</td></tr>';
 }
 
 $('#unmapped-rows').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-unmapped]');
-  if (b) run(async () => { await api(`/unmapped/${encodeURIComponent(b.dataset.unmapped)}`, { method: 'DELETE' }); loadHistory(); });
+  const ignore = e.target.closest('[data-unmapped]');
+  const reg = e.target.closest('[data-register]');
+  if (ignore) run(async () => { await api(`/unmapped/${encodeURIComponent(ignore.dataset.unmapped)}`, { method: 'DELETE' }); loadHistory(); });
+  if (reg) run(async () => {
+    await api(`/unmapped/${encodeURIComponent(reg.dataset.register)}/register`, { method: 'POST' });
+    toast('메뉴로 등록했습니다. 메뉴·레시피 탭에서 레시피를 입력하세요');
+    loadHistory();
+  });
 });
 
 // ── 설정 ────────────────────────────────────────────

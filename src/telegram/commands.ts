@@ -25,7 +25,7 @@ export function parseCommand(text: string): ParsedCommand | null {
   const name = ALIASES[m[1]!.toLowerCase()];
   if (!name) return null;
   const rest = m[2]!.trim();
-  const qm = rest.match(/^(.*?)\s+(-?\d+(?:\.\d+)?\s*(?:ml|g|개|병)?)$/i);
+  const qm = rest.match(/^(.*?)\s+(-?\d+(?:\.\d+)?\s*(?:ml|g|개|병)?(?:\s*\+?\s*\d+(?:\.\d+)?\s*ml)?)$/i);
   if (qm) return { name, target: qm[1]!.trim(), quantity: qm[2]!.replace(/\s+/g, '') };
   return { name, target: rest, quantity: null };
 }

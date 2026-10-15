@@ -1,4 +1,7 @@
 :root {
+  --ok: #15803d;
+  --danger: #b91c1c;
+  --danger-bg: #fef2f2;
   --bg: #f7f7f8;
   --card: #ffffff;
   --text: #1d1d1f;
@@ -18,6 +21,9 @@
     --accent: #5b8cff;
     --warn: #fb923c;
     --warn-bg: #2a1a10;
+    --ok: #4ade80;
+    --danger: #f87171;
+    --danger-bg: #2a1212;
   }
 }
 * { box-sizing: border-box; }
@@ -33,8 +39,6 @@ section { background: var(--card); border: 1px solid var(--line); border-radius:
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { color: var(--muted); font-weight: 500; font-size: 12px; }
-tr.low td { background: var(--warn-bg); }
-tr.low td:first-child::before { content: "⚠️ "; }
 input, select, button { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
 button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
 button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
@@ -57,6 +61,59 @@ button.danger { background: transparent; color: var(--warn); border-color: var(-
 .po pre { margin: 6px 0 0; font-family: inherit; white-space: pre-wrap; }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); }
 @media (max-width: 600px) {
-  th:nth-child(3), td:nth-child(3) { display: none; }
+  table.mv th:nth-child(5), table.mv td:nth-child(5) { display: none; }
   .recipe-line { grid-template-columns: 1fr 70px 64px 32px; }
 }
+
+/* 재고 카드 */
+.summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.summary span { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); }
+.summary .danger { color: var(--danger); }
+.summary .warn { color: var(--warn); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+.card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.card.low { border-color: var(--warn); background: var(--warn-bg); }
+.card.empty { border-color: var(--danger); background: var(--danger-bg); }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card-name { font-weight: 600; }
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.chip.ok { color: var(--ok); }
+.chip.low { color: var(--warn); }
+.chip.empty { color: var(--danger); }
+.amount { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.amount small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.gauge { position: relative; height: 8px; border-radius: 4px; background: var(--line); overflow: visible; }
+.gauge > i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--ok); }
+.card.low .gauge > i { background: var(--warn); }
+.gauge > b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .5; }
+.card .muted { font-size: 12px; }
+.card .row { flex-wrap: wrap; }
+.notice { font-size: 12px; color: var(--danger); }
+.card-history { font-size: 12px; border-top: 1px solid var(--line); padding-top: 6px; }
+.card-history div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+
+/* 메뉴 */
+.filters button { padding: 4px 10px; font-size: 13px; background: transparent; color: var(--text); border-color: var(--line); }
+.filters button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.search { width: 100%; margin: 10px 0; }
+.menu-row { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.menu-row > .menu-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; }
+.menu-head .grow { flex: 1; min-width: 0; }
+.menu-head .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-head .sub.todo { color: var(--warn); }
+.menu-body { padding: 0 12px 12px; border-top: 1px solid var(--line); }
+.menu-body .row { margin-top: 8px; flex-wrap: wrap; }
+.manual-add { margin-top: 16px; }
+.manual-add summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+table.mv td:nth-child(3), table.mv td:nth-child(4) { white-space: nowrap; }
+.plus { color: var(--ok); }
+.minus { color: var(--danger); }
+
+/* 수량 입력 */
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); padding: 16px; width: min(360px, calc(100% - 32px)); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog h3 { margin: 0 0 4px; font-size: 16px; }
+.qty-inputs label { display: flex; align-items: center; gap: 6px; flex: 1; }
+.qty-inputs input { width: 100%; }
+dialog .actions { margin-top: 12px; justify-content: flex-end; }
+.grow { flex: 1; }

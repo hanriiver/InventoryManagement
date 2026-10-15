@@ -5,6 +5,8 @@ import { toBaseUnit } from './units';
 export interface ConsumptionResult {
   /** ingredient_id → 소모량(base unit, 양수) */
   consumption: Map<number, number>;
+  /** ingredient_id → 이 재료를 쓴 메뉴 ("진토닉×2") — 원장 메모용 */
+  sources: Map<number, string[]>;
   unmapped: { key: string; name: string; tossItemId: string | null; quantity: number }[];
 }
 
@@ -13,13 +15,12 @@ export function findMenuItem(
   tossItemId: string | null,
   name: string,
 ): MenuItem | undefined {
-  const active = menuItems.filter((m) => m.active);
   if (tossItemId) {
-    const byId = active.find((m) => m.toss_item_id === tossItemId);
+    const byId = menuItems.find((m) => m.toss_item_id === tossItemId);
     if (byId) return byId;
   }
   const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase();
-  return active.find((m) => norm(m.name) === norm(name));
+  return menuItems.find((m) => norm(m.name) === norm(name));
 }
 
 /** 주문 → 재료별 소모량. 옵션(예: 샷 추가)도 같은 이름의 메뉴가 있으면 그 레시피만큼 차감 */
@@ -30,11 +31,13 @@ export function computeConsumption(
   ingredients: Map<number, Ingredient>,
 ): ConsumptionResult {
   const consumption = new Map<number, number>();
+  const sources = new Map<number, string[]>();
   const unmapped: ConsumptionResult['unmapped'] = [];
 
   const apply = (tossItemId: string | null, name: string, quantity: number, reportUnmapped: boolean) => {
     if (quantity <= 0) return;
     const menu = findMenuItem(menuItems, tossItemId, name);
+    if (menu && !menu.active) return; // 재고 차감 안 함으로 지정된 메뉴
     const lines = menu ? recipes.filter((r) => r.menu_item_id === menu.id) : [];
     if (!menu || lines.length === 0) {
       if (reportUnmapped) unmapped.push({ key: tossItemId ?? name, name, tossItemId, quantity });
@@ -45,6 +48,8 @@ export function computeConsumption(
       if (!ing) continue;
       const amount = toBaseUnit(line.amount, line.unit, ing) * quantity;
       consumption.set(ing.id, (consumption.get(ing.id) ?? 0) + amount);
+      const label = quantity > 1 ? `${name}×${quantity}` : name;
+      sources.set(ing.id, [...(sources.get(ing.id) ?? []), label]);
     }
   };
 
@@ -55,7 +60,7 @@ export function computeConsumption(
       apply(opt.tossItemId, opt.name, opt.quantity * item.quantity, false);
     }
   }
-  return { consumption, unmapped };
+  return { consumption, sources, unmapped };
 }
 
 /**

@@ -31,9 +31,10 @@ export async function processOrder(env: Env, order: NormalizedOrder, raw: unknow
   const byId = new Map(ingredients.map((i) => [i.id, i]));
 
   let target = new Map<number, number>();
+  let sources = new Map<number, string[]>();
   let unmapped: ReturnType<typeof computeConsumption>['unmapped'] = [];
   if (order.status === 'COMPLETED') {
-    ({ consumption: target, unmapped } = computeConsumption(order, menuItems, recipes, byId));
+    ({ consumption: target, sources, unmapped } = computeConsumption(order, menuItems, recipes, byId));
   }
 
   let changed: { ingredientId: number; delta: number }[] = [];
@@ -46,7 +47,7 @@ export async function processOrder(env: Env, order: NormalizedOrder, raw: unknow
       ingredientId: c.ingredientId,
       delta: c.delta,
       reason: (c.delta < 0 ? 'SALE' : 'CANCEL') as MovementReason,
-      note: order.status === 'CANCELED' ? '주문 취소' : null,
+      note: c.delta > 0 ? '주문 취소/변경' : sources.get(c.ingredientId)?.join(', ').slice(0, 200) ?? null,
     }));
     if (await repo.applyOrderMovements(db, order.orderId, version, movements)) break;
     changed = [];

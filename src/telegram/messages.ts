@@ -28,6 +28,7 @@ export function purchaseOrderKeyboard(id: number): InlineKeyboard {
 }
 
 export function stockLine(i: Ingredient): string {
+  if (i.stock <= 0) return `⛔ ${i.name}: 재고 없음${i.stock < 0 ? ` (장부상 ${formatStock(-i.stock, i)} 초과 사용 — /실사로 현재 양 입력)` : ''}`;
   const warn = needsReorder(i) ? '⚠️ ' : '';
   return `${warn}${i.name}: ${formatStock(i.stock, i)}`;
 }
@@ -56,4 +57,5 @@ export const HELP_TEXT = [
   '예) /입고 핸드릭스진 2',
   '예) /실사 레몬 12',
   '예) /실사 핸드릭스 1.5   (1.5병)',
+  '예) /실사 핸드릭스 1병+300ml',
 ].join('\n');

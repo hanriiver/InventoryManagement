@@ -34,10 +34,8 @@
       <h2>재고 현황</h2>
       <button id="btn-reorder">기준 이하 발주서 보내기</button>
     </div>
-    <table>
-      <thead><tr><th>재료</th><th>현재고</th><th>발주 기준</th><th></th></tr></thead>
-      <tbody id="stock-rows"></tbody>
-    </table>
+    <div id="stock-summary" class="summary"></div>
+    <div id="stock-cards" class="cards"></div>
   </section>
 
   <!-- 재료 -->
@@ -81,14 +79,25 @@
 
   <!-- 메뉴 / 레시피 -->
   <section data-panel="menus" hidden>
-    <h2>메뉴 추가</h2>
-    <form id="menu-form" class="row">
-      <input name="name" placeholder="메뉴 이름 (토스 상품명과 같게)" required />
-      <input name="toss_item_id" placeholder="토스 상품 ID (선택)" />
-      <button>추가</button>
-    </form>
-    <p class="muted">토스 상품 ID가 있으면 ID로, 없으면 이름(공백 무시)으로 매칭합니다. "샷 추가" 같은 옵션도 같은 이름의 메뉴로 등록하면 차감됩니다.</p>
+    <div class="toolbar">
+      <h2>메뉴·레시피</h2>
+      <div class="row wrap">
+        <button id="btn-import-catalog">토스 메뉴 불러오기</button>
+        <button id="btn-import-orders" class="secondary">최근 주문에서 불러오기</button>
+      </div>
+    </div>
+    <p class="muted">토스 매장에 등록된 메뉴를 불러온 뒤 <b>레시피만</b> 입력하면 됩니다. 음식처럼 재고와 상관없는 메뉴는 <b>차감 안 함</b>으로 두면 알림이 오지 않습니다.</p>
+    <div class="row wrap filters" id="menu-filters"></div>
+    <input id="menu-search" type="search" placeholder="메뉴 검색" class="search" />
     <div id="menu-list"></div>
+    <details class="manual-add">
+      <summary>메뉴 직접 추가</summary>
+      <form id="menu-form" class="row wrap">
+        <input name="name" placeholder="메뉴 이름 (토스 상품명과 같게)" required />
+        <input name="toss_item_id" placeholder="토스 상품 ID (선택)" />
+        <button>추가</button>
+      </form>
+    </details>
   </section>
 
   <!-- 기록 / 발주 -->
@@ -98,7 +107,7 @@
     <h2>발주서</h2>
     <div id="po-list"></div>
     <h2>재고 변동 기록</h2>
-    <table><thead><tr><th>시각(UTC)</th><th>재료</th><th>변동</th><th>사유</th><th>참조</th></tr></thead><tbody id="mv-rows"></tbody></table>
+    <table class="mv"><thead><tr><th>시각</th><th>재료</th><th>변동</th><th>남은 양</th><th>내용</th></tr></thead><tbody id="mv-rows"></tbody></table>
   </section>
 
   <!-- 설정 -->
@@ -127,6 +136,21 @@
     <pre id="output" class="output" hidden></pre>
   </section>
 </main>
+
+<dialog id="qty-dialog">
+  <form method="dialog" id="qty-form">
+    <h3 id="qty-title"></h3>
+    <p class="muted" id="qty-hint"></p>
+    <div class="row qty-inputs">
+      <label class="ml-part"><input name="bottles" type="number" step="any" min="0" inputmode="decimal" /> <span id="qty-label">병</span></label>
+      <label class="ml-part ml-extra">+ <input name="ml" type="number" step="any" min="0" inputmode="decimal" /> ml</label>
+    </div>
+    <div class="actions">
+      <button value="ok">확인</button>
+      <button value="cancel" formnovalidate class="secondary">취소</button>
+    </div>
+  </form>
+</dialog>
 
 <div id="toast" hidden></div>
 <script src="/app.js"></script>
