@@ -102,6 +102,12 @@
 
   <!-- 기록 / 발주 -->
   <section data-panel="history" hidden>
+    <div class="toolbar">
+      <h2>토스 주문</h2>
+      <button id="btn-sync-orders" class="secondary">지금 동기화</button>
+    </div>
+    <p class="muted" id="orders-hint"></p>
+    <table class="orders"><thead><tr><th>시각</th><th>메뉴</th><th>상태</th><th>재고</th></tr></thead><tbody id="order-rows"></tbody></table>
     <h2>레시피 미등록 판매</h2>
     <table><thead><tr><th>메뉴</th><th>토스 ID</th><th>누적 수량</th><th></th></tr></thead><tbody id="unmapped-rows"></tbody></table>
     <h2>발주서</h2>
@@ -124,6 +130,7 @@
     <div class="row wrap">
       <button id="btn-tg-setup" class="secondary">텔레그램 웹훅 등록</button>
       <button id="btn-sync" class="secondary">토스 주문 동기화</button>
+      <button id="btn-baseline" class="secondary">재고 반영 시작점 다시 잡기</button>
       <button id="btn-toss-sample" class="secondary">토스 주문 원본 보기</button>
       <button id="btn-logout" class="secondary">로그아웃</button>
     </div>

@@ -6,7 +6,8 @@ import { needsReorder } from '../domain/reorder';
 import { parseHHMM } from '../domain/time';
 import { addMovement, issueReorderForAllLow, processOrder, setActualStock } from '../services/inventory';
 import { sendDailyReport } from '../services/report';
-import { syncOrderById, syncRecentOrders } from '../services/toss-sync';
+import { markBaseline, syncOrderById, syncRecentOrders } from '../services/toss-sync';
+import { normalizeOrder } from '../toss/normalize';
 import { importMenusFromCatalog, importMenusFromOrders } from '../services/menu-import';
 import { TossClient, tossConfigured, tossMenuConfigured } from '../toss/client';
 import { setCommands, setWebhook, telegramConfigured } from '../telegram/api';
@@ -61,12 +62,13 @@ function ingredientValues(body: Record<string, unknown>) {
   if (!v.name) throw new Error('이름을 입력하세요');
   if (!['ml', 'ea', 'g'].includes(String(v.unit ?? 'ml'))) throw new Error('단위는 ml, ea, g 중 하나');
   if (!['manual', 'coupang'].includes(String(v.supplier ?? 'manual'))) throw new Error('공급처는 manual, coupang 중 하나');
+  const unit = (v.unit as string | null) ?? 'ml';
   return {
     ...v,
     category: v.category ?? 'liquor',
-    unit: v.unit ?? 'ml',
-    container_size: v.unit === 'ml' ? Number(v.container_size ?? 700) : 1,
-    container_label: v.container_label ?? (v.unit === 'ml' ? '병' : '개'),
+    unit,
+    container_size: unit === 'ml' ? Number(v.container_size ?? 700) : 1,
+    container_label: v.container_label ?? (unit === 'ml' ? '병' : '개'),
     reorder_point: Number(v.reorder_point ?? 1),
     supplier: v.supplier ?? 'manual',
   };
@@ -307,6 +309,37 @@ admin.post('/report/send', async (c) => {
 });
 
 // ── 토스 ─────────────────────────────────────────────
+// 최근 토스 주문과 재고 반영 여부
+admin.get('/orders', async (c) => {
+  const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+  const { results } = await c.env.DB
+    .prepare(
+      `SELECT o.order_id, o.state, o.status, o.raw, o.first_seen, o.updated_at,
+              (SELECT COUNT(*) FROM stock_movements m WHERE m.ref = o.order_id AND m.reason = 'SALE') AS sale_lines,
+              (SELECT COALESCE(SUM(delta), 0) FROM stock_movements m WHERE m.ref = o.order_id AND m.reason IN ('SALE','CANCEL')) AS net
+       FROM sales_orders o ORDER BY o.first_seen DESC, o.order_id DESC LIMIT ?`,
+    )
+    .bind(limit)
+    .all<{ order_id: string; state: string; status: string; raw: string; first_seen: string; updated_at: string; sale_lines: number; net: number }>();
+  return c.json(
+    results.map(({ raw, ...r }) => {
+      let items = '';
+      try {
+        const o = normalizeOrder(JSON.parse(raw));
+        items = o.items.map((i) => (i.quantity === 1 ? i.name : `${i.name}×${i.quantity}`)).join(', ');
+      } catch {}
+      const applied = r.status === 'BASELINE' ? 'baseline' : Math.abs(r.net) > 1e-6 ? 'deducted' : r.sale_lines > 0 ? 'restored' : 'none';
+      return { ...r, items, applied };
+    }),
+  );
+});
+
+// 시작 기준점 다시 잡기: 지금까지의 주문은 차감하지 않고, 이후 주문부터 차감
+admin.post('/toss/baseline', async (c) => {
+  await repo.setSetting(c.env.DB, 'sync_baseline_at', '');
+  return c.json(await markBaseline(c.env));
+});
+
 admin.post('/toss/sync', async (c) => c.json(await syncRecentOrders(c.env, Number(c.req.query('pages') ?? 1))));
 
 admin.post('/toss/orders/:orderId/sync', async (c) => c.json(await syncOrderById(c.env, c.req.param('orderId'))));

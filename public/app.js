@@ -363,7 +363,37 @@ $('#menu-list').addEventListener('click', (e) => {
 
 const poStatus = { DRAFT: '발주 전', SENT: '발주 완료', RECEIVED: '입고 완료' };
 
+const orderStatusText = { COMPLETED: '완료', CANCELED: '취소', PENDING: '진행 중', BASELINE: '이전 주문' };
+const appliedText = {
+  deducted: '<span class="minus">차감됨</span>',
+  restored: '<span class="plus">취소로 원복</span>',
+  baseline: '<span class="muted">반영 안 함 (시작 전)</span>',
+  none: '<span class="muted">-</span>',
+};
+
+async function loadOrders() {
+  const [orders, status] = await Promise.all([api('/orders?limit=50'), api('/status')]);
+  const base = status.settings.sync_baseline_at;
+  $('#orders-hint').innerHTML = !status.toss
+    ? '토스 매출 키(sale 앱)가 아직 설정되지 않았습니다.'
+    : base
+      ? `${kst(base.replace('T', ' ').slice(0, 19))} 이후 완료된 주문부터 재고에 반영합니다. 마지막 동기화: ${status.settings.last_sync_at ? kst(status.settings.last_sync_at.replace('T', ' ').slice(0, 19)) : '-'}`
+      : '<b>지금 동기화</b>를 누르면 기존 주문은 기록만 하고, 이후 새로 완료되는 주문부터 재고에서 뺍니다.';
+  $('#order-rows').innerHTML = orders.map((o) => `
+    <tr><td>${kst(o.first_seen)}</td><td>${esc(o.items || '(항목 없음)')}</td>
+    <td>${orderStatusText[o.status] ?? esc(o.status)}</td><td>${appliedText[o.applied] ?? ''}</td></tr>`).join('')
+    || '<tr><td colspan="4" class="muted">아직 가져온 주문이 없습니다</td></tr>';
+}
+
+$('#btn-sync-orders').addEventListener('click', () => run(async () => {
+  const r = await api('/toss/sync', { method: 'POST' });
+  const base = r.filter((x) => x.status === 'BASELINE').length;
+  toast(base ? `기존 주문 ${base}건을 시작점으로 기록했습니다 (재고 차감 없음)` : `변경된 주문 ${r.length}건 반영`);
+  loadHistory();
+}));
+
 async function loadHistory() {
+  run(loadOrders);
   const [unmapped, pos, mv] = await Promise.all([api('/unmapped'), api('/purchase-orders'), api('/movements?limit=200')]);
   $('#unmapped-rows').innerHTML = unmapped.map((u) => `
     <tr><td>${esc(u.name)}</td><td>${esc(u.toss_item_id ?? '-')}</td><td>${esc(u.count)}</td>
@@ -409,6 +439,7 @@ async function loadSettings() {
     <li>${ok(status.toss)} 토스 매출 키 (sale 앱)</li>
     <li>${ok(status.tossWebhookSecret)} 토스 웹훅 서명 secret</li>
     <li>${ok(status.telegram)} 텔레그램 봇</li>
+    <li class="muted">재고 반영 시작: ${esc(s.sync_baseline_at ? kst(s.sync_baseline_at.replace('T', ' ').slice(0, 19)) : '아직 (첫 동기화 때 설정)')}</li>
     <li class="muted">마지막 토스 동기화: ${esc(s.last_sync_at || '없음')} · 마지막 리포트: ${esc(s.last_report_day || '없음')}</li>`;
   const f = $('#settings-form');
   f.closing_time.value = s.closing_time || '';
@@ -422,6 +453,10 @@ $('#settings-form').addEventListener('submit', (e) => {
 });
 $('#btn-report').addEventListener('click', () => run(async () => { await api('/report/send', { method: 'POST' }); toast('리포트를 보냈습니다'); }));
 $('#btn-tg-setup').addEventListener('click', () => run(async () => output(await api('/telegram/setup', { method: 'POST' }))));
+$('#btn-baseline').addEventListener('click', () => {
+  if (!confirm('지금까지의 토스 주문은 재고에서 빼지 않고, 지금 이후 완료되는 주문부터 반영합니다. 진행할까요?')) return;
+  run(async () => { const r = await api('/toss/baseline', { method: 'POST' }); toast(`시작점 설정: 기존 주문 ${r.length}건 기록`); loadSettings(); });
+});
 $('#btn-sync').addEventListener('click', () => run(async () => output(await api('/toss/sync', { method: 'POST' }))));
 $('#btn-toss-sample').addEventListener('click', () => run(async () => output(await api('/toss/orders?size=3'))));
 $('#btn-logout').addEventListener('click', () => { try { localStorage.removeItem('adminToken'); } catch {} token = ''; showLogin(); });
