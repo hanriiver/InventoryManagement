@@ -76,3 +76,19 @@ describe('order time and quantity', () => {
     expect(o.orderedAt).toBe('2026-10-15T10:00:00.000Z');
   });
 });
+
+describe('메뉴 항목 찾기 (필드명이 다를 때)', () => {
+  it('중첩된 상품 정보와 알 수 없는 배열 이름', () => {
+    const o = normalizeOrder({
+      resultType: 'SUCCESS',
+      success: {
+        id: '744', orderState: 'COMPLETED', createdAt: '2026-08-16T14:14:25Z',
+        payments: [{ method: 'CARD', amount: 15000 }],
+        discounts: [{ title: '단골 할인', amount: 1000 }],
+        orderLines: [{ item: { id: 'C1', title: '진토닉' }, quantity: 2, optionChoices: [{ title: '샷 추가', quantity: 1 }] }],
+      },
+    });
+    expect(o.status).toBe('COMPLETED');
+    expect(o.items).toEqual([{ tossItemId: 'C1', name: '진토닉', quantity: 2, options: [{ tossItemId: null, name: '샷 추가', quantity: 1 }] }]);
+  });
+});

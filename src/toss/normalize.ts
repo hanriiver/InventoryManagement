@@ -8,9 +8,11 @@
 export const ORDER_ID_KEYS = ['orderId', 'id', 'orderKey'];
 export const ORDER_STATE_KEYS = ['state', 'status', 'orderState', 'orderStatus'];
 export const ORDER_TIME_KEYS = ['orderedAt', 'createdAt', 'openedAt', 'paidAt', 'completedAt', 'createdDate', 'orderDate', 'createdDateTime'];
-export const ORDER_ITEMS_KEYS = ['lineItems', 'orderLineItems', 'items', 'orderItems', 'products', 'menus'];
+export const ORDER_ITEMS_KEYS = ['lineItems', 'orderLineItems', 'items', 'orderItems', 'products', 'menus', 'orderProducts', 'cartItems'];
+/** 항목 안에 상품 정보가 한 단계 더 들어 있는 경우 (예: { item: { title } }) */
+export const ITEM_NESTED_KEYS = ['item', 'catalogItem', 'product', 'menu', 'catalog'];
 export const ITEM_ID_KEYS = ['catalogItemId', 'itemId', 'productId', 'menuId', 'id'];
-export const ITEM_NAME_KEYS = ['itemName', 'productName', 'menuName', 'name', 'title'];
+export const ITEM_NAME_KEYS = ['itemName', 'itemTitle', 'productName', 'menuName', 'name', 'title', 'displayName'];
 export const ITEM_QTY_KEYS = ['quantity', 'count', 'qty']; // 'amount'는 금액일 수 있어 제외
 export const ITEM_CANCELED_QTY_KEYS = ['canceledQuantity', 'cancelledQuantity', 'cancelQuantity'];
 export const ITEM_OPTIONS_KEYS = ['options', 'optionItems', 'selectedOptions', 'modifiers', 'optionChoices'];
@@ -80,7 +82,7 @@ export function classifyStatus(state: string): OrderStatus {
 function normalizeOption(o: unknown): NormalizedOption | null {
   if (typeof o === 'string') return { tossItemId: null, name: o, quantity: 1 };
   if (!isObj(o)) return null;
-  const name = pickString(o, ['optionName', 'choiceName', ...ITEM_NAME_KEYS]);
+  const name = pickNested(o, ['optionName', 'choiceName', ...ITEM_NAME_KEYS]);
   if (!name) return null;
   return {
     tossItemId: pickString(o, ['optionId', 'choiceId', ...ITEM_ID_KEYS]),
@@ -89,9 +91,23 @@ function normalizeOption(o: unknown): NormalizedOption | null {
   };
 }
 
+/** 직접 필드 → 없으면 item/product 같은 중첩 객체에서 */
+function pickNested(o: Obj, keys: string[]): string | null {
+  const direct = pickString(o, keys);
+  if (direct) return direct;
+  for (const k of ITEM_NESTED_KEYS) {
+    const inner = o[k];
+    if (isObj(inner)) {
+      const v = pickString(inner, keys);
+      if (v) return v;
+    }
+  }
+  return null;
+}
+
 function normalizeItem(o: unknown): NormalizedItem | null {
   if (!isObj(o)) return null;
-  const name = pickString(o, ITEM_NAME_KEYS);
+  const name = pickNested(o, ITEM_NAME_KEYS);
   if (!name) return null;
   let quantity = pickNumber(o, ITEM_QTY_KEYS, 1) - pickNumber(o, ITEM_CANCELED_QTY_KEYS, 0);
   const itemState = pickString(o, ORDER_STATE_KEYS);
@@ -107,7 +123,7 @@ function normalizeItem(o: unknown): NormalizedItem | null {
       else { const x = normalizeOption(ro); if (x) options.push(x); }
     }
   }
-  return { tossItemId: pickString(o, ITEM_ID_KEYS), name, quantity: Math.max(0, quantity), options };
+  return { tossItemId: pickNested(o, ITEM_ID_KEYS), name, quantity: Math.max(0, quantity), options };
 }
 
 export function normalizeOrder(body: unknown): NormalizedOrder {
@@ -116,10 +132,9 @@ export function normalizeOrder(body: unknown): NormalizedOrder {
   const orderId = pickString(o, ORDER_ID_KEYS);
   if (!orderId) throw new Error('주문 응답에 orderId가 없습니다');
   const state = pickString(o, ORDER_STATE_KEYS) ?? 'UNKNOWN';
-  const rawItems = pick(o, ORDER_ITEMS_KEYS);
-  const items = Array.isArray(rawItems)
-    ? rawItems.map(normalizeItem).filter((x): x is NormalizedItem => x !== null)
-    : [];
+  const known = pick(o, ORDER_ITEMS_KEYS);
+  const rawItems = Array.isArray(known) && known.length ? known : findItemArray(o);
+  const items = rawItems.map(normalizeItem).filter((x): x is NormalizedItem => x !== null);
   return { orderId, state, status: classifyStatus(state), items, orderedAt: parseTime(pick(o, ORDER_TIME_KEYS)) };
 }
 
@@ -158,4 +173,23 @@ export function parseTime(v: unknown): string | null {
   const n = typeof v === 'number' ? v : /^\d+$/.test(String(v)) ? Number(v) : NaN;
   const d = Number.isFinite(n) ? new Date(n < 1e12 ? n * 1000 : n) : new Date(String(v));
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * 알려진 필드명으로 못 찾았을 때: 주문 안에서 "이름 + 수량"을 가진 객체 배열을 찾아 메뉴 항목으로 봄.
+ * (결제·할인 목록은 보통 수량이 없어 걸러짐)
+ */
+function findItemArray(root: Obj, depth = 3): unknown[] {
+  const queue: [unknown, number][] = Object.values(root).map((v) => [v, 1]);
+  while (queue.length) {
+    const [v, d] = queue.shift()!;
+    if (Array.isArray(v)) {
+      const objs = v.filter(isObj);
+      if (objs.length && objs.every((x) => pickNested(x, ITEM_NAME_KEYS) && pick(x, ITEM_QTY_KEYS) !== undefined)) return objs;
+      if (d < depth) objs.forEach((x) => queue.push([x, d + 1]));
+    } else if (isObj(v) && d < depth) {
+      Object.values(v).forEach((x) => queue.push([x, d + 1]));
+    }
+  }
+  return [];
 }

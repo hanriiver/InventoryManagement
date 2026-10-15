@@ -391,6 +391,12 @@ async function loadOrders() {
 
 // 주문 줄을 누르면 토스에서 상세를 불러와 메뉴 해석 결과와 원본을 보여 줌
 $('#order-rows').addEventListener('click', (e) => {
+  const copy = e.target.closest('[data-copy-raw]');
+  if (copy) {
+    const text = $('pre', copy.closest('details')).textContent;
+    navigator.clipboard.writeText(text).then(() => toast('원본을 복사했습니다'), () => toast('복사 실패 — 직접 선택해서 복사해 주세요'));
+    return;
+  }
   const row = e.target.closest('.order-row');
   if (!row) return;
   const next = row.nextElementSibling;
@@ -406,7 +412,9 @@ $('#order-rows').addEventListener('click', (e) => {
       <div><b>상태:</b> ${esc(n?.state ?? '-')} ${statusLabel ? `(${statusLabel})` : ''}${d.error ? ` <span class="minus">${esc(d.error)}</span>` : ''}</div>
       <div><b>주문 시각:</b> ${n?.orderedAt ? isoKst(n.orderedAt) : '<span class="muted">찾지 못함</span>'}</div>
       <div><b>메뉴:</b><br>${items}</div>
-      <details><summary>원본 응답</summary><pre class="output">${esc(JSON.stringify(d.raw, null, 2))}</pre></details>
+      <details><summary>원본 응답</summary>
+        <button type="button" class="small secondary" data-copy-raw>원본 전체 복사</button>
+        <pre class="output">${esc(JSON.stringify(d.raw, null, 2))}</pre></details>
     </td></tr>`);
   });
 });
