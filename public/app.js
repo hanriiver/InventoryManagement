@@ -250,23 +250,16 @@ $('#btn-seed').addEventListener('click', () => {
     const r = await api('/seed/house-recipes', { method: 'POST' });
     const lines = [
       `✅ 재료 새로 추가 ${r.ingredientsAdded.length}개${r.ingredientsAdded.length ? `: ${r.ingredientsAdded.join(', ')}` : ''}`,
-      `✅ 가게 레시피 ${r.recipesSet.length}개${r.recipesSkipped.length ? ` (이미 있어서 건너뜀: ${r.recipesSkipped.join(', ')})` : ''}`,
+      `✅ 가게 레시피 ${r.recipesSet.length}개 연결${r.recipesSkipped.length ? ` (이미 레시피가 있어 그대로 둠: ${r.recipesSkipped.join(', ')})` : ''}`,
     ];
-    if (r.merged.length) lines.push('', `🔗 따로 생겼던 메뉴를 토스 메뉴로 합침: ${r.merged.map((m) => `${m.from} → ${m.into}`).join(', ')}`);
-    if (r.beer.length) {
-      lines.push('', `🍺 맥주 메뉴 ${r.beer.length}개`);
-      r.beer.forEach((b) => lines.push(`  · ${b.menu}: ${b.summary}`));
-    }
-    if (r.whisky.length) {
-      lines.push('', `🥃 위스키 자동 등록 ${r.whisky.length}개 (700ml 병, 한 잔 30ml)`);
-      r.whisky.forEach((w) => lines.push(`  · ${w.menu} → ${w.ingredient} ${w.amount}${w.note ? ` (${w.note})` : ''}`));
-    }
-    if (r.classics.length) {
-      lines.push('', `🍹 표준 레시피 적용 ${r.classics.length}개 — 가게 방식과 다르면 수정해 주세요`);
-      r.classics.forEach((c) => lines.push(`  · ${c.menu}: ${c.summary}`));
-    }
-    if (r.menusCreated.length) lines.push('', `⚠️ 토스에서 같은 이름을 못 찾아 새로 만든 메뉴: ${r.menusCreated.join(', ')}`, '   → 토스 메뉴 이름이 다르면 이 메뉴 이름을 토스와 똑같이 고쳐 주세요');
-    if (r.remaining.length) lines.push('', `❓ 아직 레시피가 없는 메뉴 ${r.remaining.length}개 (재고와 무관하면 "차감 안 함"으로):`, `  ${r.remaining.join(', ')}`);
+    const similar = r.recipesSet.filter((x) => x.similar || x.menu.replace(/\s/g, '') !== x.matched.replace(/\s/g, ''));
+    if (similar.length) lines.push('', '🔗 이름이 달라서 비슷한 토스 메뉴로 연결한 것 (맞는지 확인):', ...similar.map((x) => `  · 레시피 "${x.menu}" → 토스 "${x.matched}"`));
+    if (r.removed.length) lines.push('', `🗑 토스 상품 ID가 없어 삭제한 메뉴 ${r.removed.length}개:`, ...r.removed.map((x) => `  · ${x.menu}${x.movedTo ? ` (레시피는 토스 "${x.movedTo}"로 옮김)` : ''}`));
+    if (r.notFound.length) lines.push('', `⚠️ 토스 메뉴에서 못 찾은 레시피 ${r.notFound.length}개 — 토스에 없는 메뉴면 무시, 이름이 다르면 알려 주세요:`, ...r.notFound.map((x) => `  · ${x.recipe}${x.closest ? ` (가장 비슷한 토스 메뉴: ${x.closest})` : ''}`));
+    if (r.beer.length) lines.push('', `🍺 맥주 메뉴 ${r.beer.length}개`, ...r.beer.map((b) => `  · ${b.menu}: ${b.summary}`));
+    if (r.whisky.length) lines.push('', `🥃 위스키 자동 등록 ${r.whisky.length}개 (700ml 병, 한 잔 30ml)`, ...r.whisky.map((w) => `  · ${w.menu} → ${w.ingredient} ${w.amount}${w.note ? ` (${w.note})` : ''}`));
+    if (r.classics.length) lines.push('', `🍹 표준 레시피 적용 ${r.classics.length}개 — 가게 방식과 다르면 수정해 주세요`, ...r.classics.map((c) => `  · ${c.menu}: ${c.summary}`));
+    if (r.remaining.length) lines.push('', `❓ 아직 레시피가 없는 토스 메뉴 ${r.remaining.length}개 (재고와 무관하면 "차감 안 함"으로):`, `  ${r.remaining.join(', ')}`);
     lines.push('', '직접 확인/입력이 필요한 것:', ...r.todo.map((t) => `· ${t}`), '· 새로 추가된 재료는 재고 0이라, 재고 탭에서 "현재 양 입력"으로 실제 양을 넣어 주세요');
     const out = $('#seed-output');
     out.textContent = lines.join('\n');
@@ -319,6 +312,7 @@ function renderMenus() {
         <div class="grow">
           <div>${esc(m.name)} ${m.kind === 'option' ? '<span class="muted">(옵션)</span>' : ''}</div>
           <div class="sub ${m.state === 'todo' ? 'todo' : ''}">${m.state === 'done' ? esc(m.recipe_summary) : m.state === 'ignored' ? '재고 차감 안 함' : '레시피를 입력해 주세요'}${m.category ? ` · ${esc(m.category)}` : ''}</div>
+          <div class="sub">${m.toss_item_id ? `토스 상품 ID ${esc(m.toss_item_id)}` : '<span class="minus">토스 상품 ID 없음 — 판매와 연결되지 않습니다</span>'}</div>
         </div>
         <span class="chip ${m.state === 'done' ? 'ok' : m.state === 'todo' ? 'low' : ''}">${menuStateText[m.state]}</span>
       </div>
@@ -336,7 +330,6 @@ function menuBody(m) {
       <button type="button" class="small secondary" data-toggle-active>${m.active ? '재고 차감 안 함으로' : '재고 차감 다시 켜기'}</button>
       <button type="button" class="small danger" data-del-menu>삭제</button>
     </div>
-    <div class="muted" style="margin-top:6px">${m.toss_item_id ? `토스 상품 ID ${esc(m.toss_item_id)}` : '토스 ID 없음 · 이름으로 매칭'}</div>
   </div>`;
 }
 

@@ -3,43 +3,44 @@ import * as repo from '../db/repo';
 import { HOUSE_INGREDIENTS, HOUSE_RECIPES, HOUSE_RECIPE_TODO, beerRecipe, type SeedIngredient, type SeedRecipe } from '../seed/house-recipes';
 import { CLASSIC_INGREDIENTS, CLASSIC_RECIPES } from '../seed/classics';
 import { detectWhisky } from '../seed/whisky';
-import { nameKeys, normalizeMenuName } from '../seed/matching';
+import { closestName, findByName, normalizeMenuName } from '../seed/matching';
 
 export interface SeedResult {
   ingredientsAdded: string[];
   ingredientsKept: string[];
-  recipesSet: { menu: string; matched: string }[];
+  /** 가게 레시피 → 연결된 토스 메뉴 (similar: 이름이 조금 달라서 비슷한 이름으로 연결) */
+  recipesSet: { menu: string; matched: string; similar: boolean }[];
   recipesSkipped: string[];
-  menusCreated: string[];
-  /** 따로 생겼던 중복 메뉴를 토스 메뉴로 합친 것 */
-  merged: { from: string; into: string }[];
-  /** 맥주 메뉴 */
+  /** 토스 메뉴에서 못 찾은 가게 레시피 */
+  notFound: { recipe: string; closest: string | null }[];
+  /** 토스 상품 ID가 없어서 삭제한 메뉴 (레시피는 토스 메뉴로 옮김) */
+  removed: { menu: string; movedTo: string | null; movedToId?: number | null }[];
   beer: { menu: string; summary: string }[];
-  /** 위스키 자동 인식: 토스 메뉴 → 재료, 양 */
   whisky: { menu: string; ingredient: string; amount: string; note?: string }[];
-  /** 표준 레시피를 넣은 메뉴 (확인 필요) */
   classics: { menu: string; summary: string }[];
-  /** 아직 레시피가 없는 메뉴 */
+  /** 아직 레시피가 없는 토스 메뉴 */
   remaining: string[];
   todo: string[];
 }
 
 const norm = normalizeMenuName;
+const summarize = (lines: SeedRecipe['lines']) => lines.map((l) => `${l.ingredient} ${l.amount}${l.unit === 'ea' ? '개' : 'ml'}`).join(', ');
 
 /**
- * 가게 레시피 → 표준 칵테일/논알콜 → 위스키 자동 인식 순서로 레시피를 채웁니다.
- * - 이미 있는 재료는 건드리지 않음. 새 재료는 재고 0
- * - 이미 레시피가 있는 메뉴는 그대로 둠 (가게 레시피만 overwrite=true면 덮어씀)
+ * 토스에서 불러온 메뉴(토스 상품 ID 있음)에만 레시피를 넣습니다. 메뉴를 새로 만들지 않습니다.
+ * 순서: 토스 ID 없는 메뉴 정리 → 가게 레시피 → 맥주 → 표준 칵테일·논알콜 → 위스키 자동 인식
+ * - 이름은 띄어쓰기·표기 차이를 무시하고, 한두 글자 다르면 비슷한 이름으로 연결
+ * - 이미 있는 재료·레시피는 그대로 둠 (가게 레시피만 overwrite=true면 덮어씀)
  */
 export async function seedHouseRecipes(env: Env, overwrite = false): Promise<SeedResult> {
   const db = env.DB;
   const result: SeedResult = {
-    ingredientsAdded: [], ingredientsKept: [], recipesSet: [], recipesSkipped: [], menusCreated: [], merged: [], beer: [],
-    whisky: [], classics: [], remaining: [], todo: HOUSE_RECIPE_TODO,
+    ingredientsAdded: [], ingredientsKept: [], recipesSet: [], recipesSkipped: [], notFound: [], removed: [],
+    beer: [], whisky: [], classics: [], remaining: [], todo: HOUSE_RECIPE_TODO,
   };
 
-  const ingredients = await repo.listIngredients(db);
-  const ingByName = new Map(ingredients.map((i) => [norm(i.name), i]));
+  // 재료
+  const ingByName = new Map((await repo.listIngredients(db)).map((i) => [norm(i.name), i]));
   const ensureIngredient = async (s: SeedIngredient, report = true): Promise<Ingredient> => {
     const found = ingByName.get(norm(s.name));
     if (found) {
@@ -57,18 +58,13 @@ export async function seedHouseRecipes(env: Env, overwrite = false): Promise<See
     result.ingredientsAdded.push(s.name);
     return row;
   };
-
   for (const s of HOUSE_INGREDIENTS) await ensureIngredient(s);
 
-  result.merged = await mergeDuplicateMenus(db);
-  // 토스에서 온 메뉴(토스 ID 있음)를 먼저 찾도록 정렬
-  const menus = (await repo.listMenuItems(db)).sort((a, b) => Number(!a.toss_item_id) - Number(!b.toss_item_id));
-  const recipes = await repo.listRecipes(db);
-  const hasRecipe = new Set(recipes.map((r: RecipeLine) => r.menu_item_id));
-  const findMenu = (name: string, aliases: string[] = []) => {
-    const keys = new Set([...nameKeys(name), ...aliases.map(norm)]);
-    return menus.find((m) => keys.has(norm(m.name)));
-  };
+  // 토스 ID 없는 메뉴 정리 (레시피는 비슷한 토스 메뉴로 옮김)
+  result.removed = await removeMenusWithoutTossId(db);
+
+  const menus = (await repo.listMenuItems(db)).filter((m) => m.toss_item_id);
+  const hasRecipe = new Set((await repo.listRecipes(db)).map((r: RecipeLine) => r.menu_item_id));
   const writeRecipe = async (menu: MenuItem, lines: SeedRecipe['lines']) => {
     const stmts = [db.prepare('DELETE FROM recipe_lines WHERE menu_item_id = ?').bind(menu.id)];
     for (const l of lines) {
@@ -80,27 +76,46 @@ export async function seedHouseRecipes(env: Env, overwrite = false): Promise<See
     hasRecipe.add(menu.id);
   };
 
-  // 1) 가게 레시피 (토스에 없으면 메뉴를 만듦)
-  for (const r of HOUSE_RECIPES) {
-    let menu = findMenu(r.menu, r.aliases);
-    if (!menu) {
-      menu = (await db.prepare('INSERT INTO menu_items (name) VALUES (?) RETURNING *').bind(r.menu).first<MenuItem>())!;
-      menus.push(menu);
-      result.menusCreated.push(r.menu);
-    }
-    if (!overwrite && hasRecipe.has(menu.id)) {
+  // 1) 가게 레시피: 같은 이름 먼저 전부 연결한 뒤, 남은 것만 비슷한 이름으로 (다른 레시피가 쓴 메뉴는 제외)
+  const claimed = new Set<number>();
+  const pending: typeof HOUSE_RECIPES = [];
+  // 삭제한 중복 메뉴에서 옮겨 온 레시피는 예전 버전일 수 있어 가게 레시피로 덮어씀
+  const movedIds = new Set(result.removed.map((r) => r.movedToId).filter((x): x is number => x != null));
+  const assign = async (r: (typeof HOUSE_RECIPES)[number], menu: MenuItem, similar: boolean) => {
+    claimed.add(menu.id);
+    if (!overwrite && hasRecipe.has(menu.id) && !movedIds.has(menu.id)) {
       result.recipesSkipped.push(menu.name);
-      continue;
+      return;
     }
     await writeRecipe(menu, r.lines);
-    result.recipesSet.push({ menu: r.menu, matched: menu.name });
+    result.recipesSet.push({ menu: r.menu, matched: menu.name, similar });
+  };
+  for (const r of HOUSE_RECIPES) {
+    const m = findByName(menus, r.menu, r.aliases);
+    if (m && m.score === 1 && !claimed.has(m.item.id)) await assign(r, m.item, false);
+    else pending.push(r);
+  }
+  for (const r of pending) {
+    const m = findByName(menus.filter((x) => !claimed.has(x.id)), r.menu, r.aliases);
+    if (m) await assign(r, m.item, m.score < 1);
+    else result.notFound.push({ recipe: r.menu, closest: closestName(menus, r.menu) });
   }
 
-  // 2) 표준 칵테일·논알콜 (토스에 그 메뉴가 있고 레시피가 없을 때만)
+  // 2) 맥주: 이름에 IPA/라거/기네스, 보일러메이커
+  for (const menu of menus) {
+    if (hasRecipe.has(menu.id) || !menu.active) continue;
+    const lines = beerRecipe(menu.name);
+    if (!lines) continue;
+    await writeRecipe(menu, lines);
+    result.beer.push({ menu: menu.name, summary: summarize(lines) });
+  }
+
+  // 3) 표준 칵테일·논알콜 (토스에 그 메뉴가 있고 레시피가 없을 때만)
   const classicIng = new Map(CLASSIC_INGREDIENTS.map((i) => [norm(i.name), i]));
   for (const r of CLASSIC_RECIPES) {
-    const menu = findMenu(r.menu, r.aliases);
-    if (!menu || hasRecipe.has(menu.id) || !menu.active) continue;
+    // 표준 레시피는 짧은 이름이 많아(진 하이볼 ↔ 짐빔 하이볼) 같은 이름일 때만 연결
+    const m = findByName(menus.filter((x) => !hasRecipe.has(x.id) && x.active), r.menu, r.aliases);
+    if (!m || m.score < 1) continue;
     for (const l of r.lines) {
       if (!ingByName.has(norm(l.ingredient))) {
         const def = classicIng.get(norm(l.ingredient));
@@ -108,20 +123,11 @@ export async function seedHouseRecipes(env: Env, overwrite = false): Promise<See
         await ensureIngredient(def, false);
       }
     }
-    await writeRecipe(menu, r.lines);
-    result.classics.push({ menu: menu.name, summary: r.lines.map((l) => `${l.ingredient} ${l.amount}${l.unit === 'ea' ? '개' : 'ml'}`).join(', ') });
+    await writeRecipe(m.item, r.lines);
+    result.classics.push({ menu: m.item.name, summary: summarize(r.lines) });
   }
 
-  // 2.5) 맥주: 이름에 IPA/라거/기네스, 보일러메이커
-  for (const menu of menus) {
-    if (hasRecipe.has(menu.id) || !menu.active) continue;
-    const lines = beerRecipe(menu.name);
-    if (!lines) continue;
-    await writeRecipe(menu, lines);
-    result.beer.push({ menu: menu.name, summary: lines.map((l) => `${l.ingredient} ${l.amount}${l.unit === 'ea' ? '개' : 'ml'}`).join(', ') });
-  }
-
-  // 3) 위스키: 메뉴 이름/카테고리로 인식 → 제품명 재료(700ml) + 30ml
+  // 4) 위스키: 메뉴 이름/카테고리로 인식 → 제품명 재료(700ml) + 30ml
   for (const menu of menus) {
     if (hasRecipe.has(menu.id) || !menu.active || menu.kind === 'option') continue;
     const w = detectWhisky(menu.name, menu.category);
@@ -157,24 +163,32 @@ export function findSimilarLiquor(ingredients: Ingredient[], product: string): I
 }
 
 /**
- * 예전 버전에서 이름 매칭이 안 돼 따로 만들어진 메뉴(토스 ID 없음)가 토스 메뉴와 같은 이름이면 합칩니다.
- * 토스 메뉴에 레시피가 없으면 레시피를 옮기고, 중복 메뉴는 삭제합니다.
+ * 토스 상품 ID가 없는 메뉴(예전 버전이 만든 메뉴, 직접 추가한 메뉴)를 삭제.
+ * 레시피가 있으면 이름이 같거나 비슷한 토스 메뉴(레시피 없는 것)로 옮긴 뒤 삭제합니다.
+ * 토스 메뉴가 하나도 없으면(아직 불러오기 전) 아무것도 지우지 않습니다.
  */
-async function mergeDuplicateMenus(db: D1Database): Promise<{ from: string; into: string }[]> {
+export async function removeMenusWithoutTossId(db: D1Database): Promise<{ menu: string; movedTo: string | null; movedToId: number | null }[]> {
   const menus = await repo.listMenuItems(db);
-  const recipes = await repo.listRecipes(db);
   const tossMenus = menus.filter((m) => m.toss_item_id);
-  const merged: { from: string; into: string }[] = [];
+  if (!tossMenus.length) return [];
+  const withRecipe = new Set((await repo.listRecipes(db)).map((r) => r.menu_item_id));
+  const removed: { menu: string; movedTo: string | null; movedToId: number | null }[] = [];
   for (const dup of menus.filter((m) => !m.toss_item_id)) {
-    const target = tossMenus.find((t) => normalizeMenuName(t.name) === normalizeMenuName(dup.name));
-    if (!target) continue;
     const stmts: D1PreparedStatement[] = [];
-    if (!recipes.some((r) => r.menu_item_id === target.id)) {
-      stmts.push(db.prepare('UPDATE recipe_lines SET menu_item_id = ? WHERE menu_item_id = ?').bind(target.id, dup.id));
+    let movedTo: string | null = null;
+    let movedToId: number | null = null;
+    if (withRecipe.has(dup.id)) {
+      const target = findByName(tossMenus.filter((t) => !withRecipe.has(t.id)), dup.name)?.item;
+      if (target) {
+        stmts.push(db.prepare('UPDATE recipe_lines SET menu_item_id = ? WHERE menu_item_id = ?').bind(target.id, dup.id));
+        withRecipe.add(target.id);
+        movedTo = target.name;
+        movedToId = target.id;
+      }
     }
     stmts.push(db.prepare('DELETE FROM menu_items WHERE id = ?').bind(dup.id));
     await db.batch(stmts);
-    merged.push({ from: dup.name, into: target.name });
+    removed.push({ menu: dup.name, movedTo, movedToId });
   }
-  return merged;
+  return removed;
 }

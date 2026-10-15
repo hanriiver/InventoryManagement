@@ -67,3 +67,22 @@ describe('맥주 메뉴', async () => {
     expect(beerRecipe('진토닉')).toBeNull();
   });
 });
+
+describe('비슷한 이름 연결', async () => {
+  const { findByName, similarity, closestName } = await import('../src/seed/matching');
+  const menus = [{ name: '피치크러쉬' }, { name: '화이트 러시안' }, { name: '짐빔 하이볼' }, { name: '마가리타' }];
+  it('띄어쓰기 무시, 한두 글자 차이는 연결', () => {
+    expect(findByName(menus, '피치 크러시')).toEqual({ item: menus[0], score: 1 }); // 쉬/시 표기 통일
+    expect(findByName(menus, '화이트러시안')?.score).toBe(1);
+    expect(similarity('준벅', '준 벅')).toBe(1);
+    expect(findByName([{ name: '카타르시즈' }], '카타르시스')?.score).toBeGreaterThanOrEqual(0.75);
+  });
+  it('다른 메뉴는 연결하지 않음', () => {
+    expect(findByName(menus, '블랙 러시안')).toBeNull();
+    expect(findByName(menus, '진토닉')).toBeNull();
+    expect(findByName([{ name: '진토닉' }, { name: '진피즈' }], '진 슬링')).toBeNull();
+  });
+  it('못 찾으면 가장 비슷한 이름 안내', () => {
+    expect(closestName(menus, '블랙 러시안')).toBe('화이트 러시안');
+  });
+});
