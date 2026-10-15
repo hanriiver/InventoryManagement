@@ -8,7 +8,7 @@ import { addMovement, issueReorderForAllLow, processOrder, setActualStock } from
 import { sendDailyReport } from '../services/report';
 import { syncOrderById, syncRecentOrders } from '../services/toss-sync';
 import { importMenusFromCatalog, importMenusFromOrders } from '../services/menu-import';
-import { TossClient, tossConfigured } from '../toss/client';
+import { TossClient, tossConfigured, tossMenuConfigured } from '../toss/client';
 import { setCommands, setWebhook, telegramConfigured } from '../telegram/api';
 
 export const admin = new Hono<{ Bindings: Env }>();
@@ -43,6 +43,7 @@ const view = (i: Ingredient) => {
 admin.get('/status', async (c) => {
   return c.json({
     toss: tossConfigured(c.env),
+    tossMenu: tossMenuConfigured(c.env),
     telegram: telegramConfigured(c.env),
     tossWebhookSecret: Boolean(c.env.TOSS_WEBHOOK_SECRET),
     settings: await repo.getSettings(c.env.DB),

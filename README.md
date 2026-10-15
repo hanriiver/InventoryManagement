@@ -61,8 +61,10 @@ npm run db:migrate:remote
 npx wrangler secret put ADMIN_TOKEN              # 관리자 웹 로그인용 임의 문자열
 npx wrangler secret put TELEGRAM_BOT_TOKEN       # @BotFather에서 발급
 npx wrangler secret put TELEGRAM_WEBHOOK_SECRET  # 임의 문자열 (영문/숫자/_-)
-npx wrangler secret put TOSS_ACCESS_KEY          # 토스플레이스 개발자센터
+npx wrangler secret put TOSS_ACCESS_KEY          # 토스플레이스 개발자센터 — 매출(주문 조회) 앱 키
 npx wrangler secret put TOSS_SECRET_KEY
+npx wrangler secret put TOSS_MENU_ACCESS_KEY     # 메뉴(상품 조회) 앱 키. 앱 하나로 둘 다 되면 생략
+npx wrangler secret put TOSS_MENU_SECRET_KEY
 npx wrangler secret put TOSS_MERCHANT_ID         # ⚠️ POS 로그인용 10자리 매장번호와 다른 값
 npx wrangler secret put TOSS_WEBHOOK_SECRET      # 웹훅 서명 secret
 

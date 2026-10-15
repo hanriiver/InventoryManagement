@@ -405,7 +405,8 @@ async function loadSettings() {
   const s = status.settings;
   const ok = (v) => (v ? '✅' : '❌');
   $('#status').innerHTML = `
-    <li>${ok(status.toss)} 토스 API 키</li>
+    <li>${ok(status.tossMenu)} 토스 메뉴 키 (menu 앱)</li>
+    <li>${ok(status.toss)} 토스 매출 키 (sale 앱)</li>
     <li>${ok(status.tossWebhookSecret)} 토스 웹훅 서명 secret</li>
     <li>${ok(status.telegram)} 텔레그램 봇</li>
     <li class="muted">마지막 토스 동기화: ${esc(s.last_sync_at || '없음')} · 마지막 리포트: ${esc(s.last_report_day || '없음')}</li>`;
