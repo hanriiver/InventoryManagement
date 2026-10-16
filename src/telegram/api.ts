@@ -61,9 +61,11 @@ export async function setWebhook(env: Env, url: string): Promise<unknown> {
 export async function setCommands(env: Env): Promise<unknown> {
   return call(env, 'setMyCommands', {
     commands: [
-      { command: 'stock', description: '재고 현황 (/재고)' },
+      { command: 'stock', description: '재고 현황: /재고 [이름|술|맥주|과일]' },
+      { command: 'low', description: '부족한 재료만 보기 (/부족)' },
+      { command: 'add', description: '새 재료 등록: /재료추가 이름 700' },
       { command: 'order', description: '발주서 만들기 (/발주)' },
-      { command: 'restock', description: '입고: /restock 이름 수량 (/입고)' },
+      { command: 'restock', description: '입고: /입고 이름 수량, 이름 수량 …' },
       { command: 'count', description: '실사 보정: /count 이름 수량 (/실사)' },
       { command: 'report', description: '오늘 리포트 (/리포트)' },
       { command: 'sync', description: '토스 주문 동기화 (/동기화)' },

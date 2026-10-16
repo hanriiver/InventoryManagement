@@ -497,9 +497,7 @@ async function loadSettings() {
     <li>${ok(status.tossMenu)} 토스 메뉴 키 (menu 앱)</li>
     <li>${ok(status.toss)} 토스 매출 키 (sale 앱)</li>
     <li>${ok(status.tossWebhookSecret)} 토스 웹훅 서명 secret</li>
-    <li>${ok(status.kakao.connected)} 카카오톡 알림 (나에게 보내기)${!status.kakao.restKey ? ' — KAKAO_REST_API_KEY 필요' : !status.kakao.connected ? ' — "카카오톡 연결하기"를 눌러 주세요' : ''}${status.kakao.lastError ? ` <span class="minus">마지막 오류: ${esc(status.kakao.lastError)}</span>` : ''}</li>
-    <li>${ok(status.kakao.allowedUsers > 0)} 카카오톡 챗봇 명령 (등록된 사용자 ${status.kakao.allowedUsers}명)${status.kakao.skillSecret ? '' : ' · KAKAO_SKILL_SECRET 없음'}</li>
-    <li>${ok(status.telegram)} 텔레그램 봇 (카카오톡이 연결되면 알림은 카카오톡으로)</li>
+    <li>${ok(status.telegram)} 텔레그램 봇</li>
     <li class="muted">재고 반영 시작: ${esc(s.sync_baseline_at ? kst(s.sync_baseline_at.replace('T', ' ').slice(0, 19)) : '아직 (첫 동기화 때 설정)')}</li>
     <li class="muted">마지막 토스 동기화: ${esc(s.last_sync_at || '없음')} · 마지막 리포트: ${esc(s.last_report_day || '없음')}</li>`;
   const f = $('#settings-form');
@@ -520,19 +518,6 @@ $('#btn-baseline').addEventListener('click', () => {
 });
 $('#btn-sync').addEventListener('click', () => run(async () => output(await api('/toss/sync', { method: 'POST' }))));
 $('#btn-toss-sample').addEventListener('click', () => run(async () => output(await api('/toss/orders?size=3'))));
-$('#kakao-skill-url').textContent = `${location.origin}/webhook/kakao?key=<KAKAO_SKILL_SECRET 값>`;
-$('#btn-kakao-connect').addEventListener('click', () => run(async () => {
-  const { url } = await api('/kakao/auth-url');
-  location.href = url;
-}));
-$('#btn-kakao-test').addEventListener('click', () => run(async () => {
-  await api('/kakao/test', { method: 'POST' });
-  toast('카카오톡 나와의 채팅으로 보냈습니다');
-}));
-$('#btn-kakao-disconnect').addEventListener('click', () => {
-  if (!confirm('카카오톡 알림 연결을 끊을까요?')) return;
-  run(async () => { await api('/kakao/disconnect', { method: 'POST' }); loadSettings(); });
-});
 $('#btn-reset').addEventListener('click', () => {
   const typed = prompt('메뉴, 레시피, 재료, 재고 기록, 발주서를 모두 지웁니다.\n(토스 주문 기록과 설정은 남아서 지난 주문이 다시 차감되지는 않습니다)\n\n진행하려면 "초기화"라고 입력하세요.');
   if (typed === null) return;

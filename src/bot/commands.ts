@@ -1,14 +1,15 @@
 import type { Env, Ingredient, PurchaseOrderLine } from '../types';
 import * as repo from '../db/repo';
 import { parseQuantity, formatStock } from '../domain/units';
-import { parseCommand } from '../telegram/commands';
+import { CATEGORY_WORDS, parseCommand, parseItems, parseNewIngredient } from '../telegram/commands';
+import { needsReorder, toOrderLine } from '../domain/reorder';
 import { HELP_TEXT, stockLine, stockListText } from '../telegram/messages';
 import { addMovement, issueReorderForAllLow, receivePurchaseOrder, setActualStock } from '../services/inventory';
 import { buildDailyReport } from '../services/report';
 import { syncRecentOrders } from '../services/toss-sync';
 import { tossConfigured } from '../toss/client';
 
-/** 텔레그램·카카오톡 공통 명령 처리. 슬래시(/)는 있어도 없어도 됩니다. */
+/** 텔레그램 명령 처리. 슬래시(/)는 있어도 없어도 됩니다. */
 async function resolveIngredient(env: Env, target: string): Promise<Ingredient> {
   if (!target) throw new Error('재료 이름을 입력하세요');
   const found = await repo.searchIngredients(env.DB, target);
@@ -24,16 +25,68 @@ export async function runCommand(env: Env, text: string): Promise<string> {
     case 'help':
       return HELP_TEXT;
     case 'stock': {
-      if (!cmd.target && !cmd.quantity) return stockListText(await repo.listIngredients(env.DB));
-      const found = await repo.searchIngredients(env.DB, [cmd.target, cmd.quantity].filter(Boolean).join(' '));
-      return found.length ? found.map(stockLine).join('\n') : `'${cmd.target}' 재료를 찾을 수 없습니다`;
+      const all = await repo.listIngredients(env.DB);
+      if (!cmd.rest) return stockListText(all);
+      const cat = CATEGORY_WORDS[cmd.rest];
+      if (cat) {
+        const list = all.filter((i) => i.category === cat);
+        return list.length ? stockListText(list) : `'${cmd.rest}' 분류에 재료가 없습니다`;
+      }
+      const found = await repo.searchIngredients(env.DB, cmd.rest);
+      return found.length ? found.map(stockLine).join('\n') : `'${cmd.rest}' 재료를 찾을 수 없습니다`;
+    }
+    case 'low': {
+      const all = await repo.listIngredients(env.DB);
+      const empty = all.filter((i) => i.stock <= 0);
+      const low = all.filter((i) => i.stock > 0 && needsReorder(i));
+      if (!empty.length && !low.length) return '✅ 부족한 재료가 없습니다';
+      const out: string[] = [];
+      if (empty.length) out.push(`⛔ 재고 없음 ${empty.length}`, ...empty.map((i) => `· ${i.name}`), '');
+      if (low.length) out.push(`⚠️ 발주 기준 이하 ${low.length}`, ...low.map(stockLine), '');
+      const lines = [...empty, ...low].map(toOrderLine);
+      out.push('▼ 발주서 (복사용)', ...lines.map((l) => `${l.name} ${l.qty}`), '', '발주서를 저장하려면 /발주');
+      return out.join('\n');
+    }
+    case 'add': {
+      const spec = parseNewIngredient(cmd.rest);
+      if ((await repo.searchIngredients(env.DB, spec.name)).some((i) => i.name.replace(/\s/g, '') === spec.name.replace(/\s/g, ''))) {
+        throw new Error(`'${spec.name}'은(는) 이미 등록돼 있어요. 입고는 /입고 ${spec.name} 수량`);
+      }
+      await env.DB
+        .prepare(
+          `INSERT INTO ingredients (name, category, unit, container_size, container_label, reorder_point, order_alias)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(spec.name, spec.category, spec.unit, spec.container_size, spec.container_label, spec.unit === 'ml' ? 1 : 5, spec.name.replace(/\s+/g, ''))
+        .run();
+      const unitText = spec.unit === 'ml' ? `${spec.container_size}ml ${spec.container_label}` : `${spec.container_label} 단위`;
+      const reorder = spec.unit === 'ml' ? `1${spec.container_label}` : `5${spec.container_label}`;
+      return [
+        `➕ 재료 등록: ${spec.name} (${unitText})`,
+        `발주 알림 기준: ${reorder} 이하 (관리자 웹 재료 탭에서 변경)`,
+        '',
+        `지금 재고는 0이에요. 들어온 양을 입고하세요:`,
+        `/입고 ${spec.name} ${spec.unit === 'ml' ? '2' : '24'}`,
+        '레시피 연결은 관리자 웹 메뉴·레시피 탭에서 할 수 있어요.',
+      ].join('\n');
     }
     case 'restock': {
-      if (!cmd.quantity) throw new Error('사용법: /입고 이름 수량  (예: /입고 핸드릭스진 2)');
-      const ing = await resolveIngredient(env, cmd.target);
-      const amount = parseQuantity(cmd.quantity, ing);
-      const after = await addMovement(env, ing.id, amount, 'RESTOCK', '메신저 입고');
-      return `📦 입고: ${ing.name} +${formatStock(amount, ing)}\n현재: ${formatStock(after.stock, after)}`;
+      const items = parseItems(cmd.rest);
+      if (!items.length || items.some((i) => !i.quantity)) {
+        throw new Error('사용법: 입고 이름 수량  (예: 입고 고든스진 2)\n여러 개는 쉼표나 줄바꿈으로: 입고 고든스진 2, 레몬 20, IPA 24');
+      }
+      const out: string[] = [];
+      for (const item of items) {
+        try {
+          const ing = await resolveIngredient(env, item.name);
+          const amount = parseQuantity(item.quantity!, ing);
+          const after = await addMovement(env, ing.id, amount, 'RESTOCK', '텔레그램 입고');
+          out.push(`📦 ${ing.name} +${formatStock(amount, ing)} → 현재 ${formatStock(after.stock, after)}`);
+        } catch (e) {
+          out.push(`⚠️ ${item.name}: ${(e as Error).message}`);
+        }
+      }
+      return out.join('\n');
     }
     case 'count': {
       if (!cmd.quantity) throw new Error('사용법: /실사 이름 수량  (예: /실사 레몬 12, /실사 핸드릭스 1.5)');

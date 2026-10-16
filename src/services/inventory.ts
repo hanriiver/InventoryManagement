@@ -95,12 +95,7 @@ export async function issuePurchaseOrder(env: Env, lines: PurchaseOrderLine[]): 
     const r = await suppliers.coupang.placeOrder(env, coupangLines);
     if (r.placed) extra = `\n\n🛒 쿠팡 자동주문 완료: ${r.message}`;
   }
-  const text = purchaseOrderText(id, lines) + extra;
-  await notify(env, {
-    text,
-    short: `${text}\n\n입고되면 채널에 "입고처리 ${id}"`,
-    buttons: purchaseOrderKeyboard(id),
-  });
+  await notify(env, { text: purchaseOrderText(id, lines) + extra, buttons: purchaseOrderKeyboard(id) });
   return id;
 }
 

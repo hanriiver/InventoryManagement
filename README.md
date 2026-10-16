@@ -40,46 +40,25 @@
 
 ## 텔레그램 명령
 
+앞에 `/`는 붙여도 되고 안 붙여도 됩니다.
+
 ```
-/재고 [이름]        재고 현황            (/stock)
-/입고 이름 수량     입고 (2 = 2병, 350ml) (/restock)
-/실사 이름 수량     실제 남은 양으로 보정  (/count)
-/발주               기준 이하 재료 발주서  (/order)
-/리포트             오늘 리포트           (/report)
-/동기화             토스 주문 즉시 동기화  (/sync)
+/재고                     전체 재고
+/재고 고든스              특정 재료
+/재고 맥주                분류별 (술·맥주·과일·시럽·기타)
+/부족                     발주 필요·재고 없는 재료 + 복사용 발주서
+
+/입고 고든스진 2          2병 입고 (350ml처럼 ml도 가능)
+/입고 고든스진 2, 레몬 20, IPA 24   한 번에 여러 개 (쉼표·줄바꿈)
+/실사 헨드릭스 1병+300ml  실제 남은 양으로 보정
+/재료추가 탱커레이 700    새 술 등록 (700ml 병)
+/재료추가 코로나 캔 맥주  개수 단위 재료 등록
+
+/발주                     기준 이하 재료로 발주서
+/발주완료 12, /입고처리 12
+/리포트, /동기화, /도움
 ```
 발주서 메시지의 `✅ 발주 완료` / `📦 입고 처리` 버튼으로 상태 변경 및 입고가 한 번에 됩니다.
-
-## 카카오톡 연결
-
-카카오톡은 **알림 보내기**와 **명령 받기**가 별도 기능입니다.
-
-### 1) 알림: 카카오톡 "나에게 보내기" (무료)
-발주 알림·마감 리포트·레시피 미등록 알림이 카카오톡 **나와의 채팅**으로 옵니다. (메시지당 200자라 리포트는 요약본)
-
-1. https://developers.kakao.com → 내 애플리케이션 → 애플리케이션 추가
-2. **앱 키 → REST API 키**를 `KAKAO_REST_API_KEY`에 등록
-3. **카카오 로그인 → 활성화 ON**, **Redirect URI** 등록
-   - 로컬: `http://localhost:8787/oauth/kakao/callback`
-   - 배포: `https://<worker 주소>/oauth/kakao/callback`
-4. **카카오 로그인 → 동의항목 → 카카오톡 메시지 전송(talk_message)** 사용 설정
-5. **앱 설정 → 플랫폼 → Web → 사이트 도메인**에 `http://localhost:8787`, `https://<worker 주소>` 등록 (메시지 버튼 링크용)
-6. (Client Secret을 켰다면) 그 값을 `KAKAO_CLIENT_SECRET`에 등록
-7. 관리자 웹 **설정 → 카카오톡 연결하기** → 카카오 로그인 → 나와의 채팅에 테스트 메시지가 오면 완료
-
-토큰은 자동 갱신됩니다. 2개월 넘게 서버가 꺼져 있으면 다시 "카카오톡 연결하기"를 누르세요.
-
-### 2) 명령: 카카오톡 채널 챗봇 (배포 후)
-카카오톡 채널에 `재고`, `입고 고든스진 2`, `입고처리 12` 같은 말을 보내면 답해 줍니다.
-
-1. https://center-pf.kakao.com 에서 카카오톡 채널 만들기
-2. https://chatbot.kakao.com (카카오 i 오픈빌더)에서 봇 만들기 → 채널 연결
-3. **스킬 → 생성** → URL: `https://<worker 주소>/webhook/kakao?key=<KAKAO_SKILL_SECRET>`
-4. **시나리오 → 폴백 블록**(및 웰컴 블록)의 응답을 **스킬 데이터 사용**으로 → 배포
-5. 채널에 아무 말이나 보내면 "사용자 ID"가 답으로 옴 → `KAKAO_ALLOWED_USERS`에 등록 (여러 명은 쉼표)
-6. 다시 `재고`를 보내 확인
-
-오픈빌더 응답은 5초 제한이라, 오래 걸리는 명령(토스 동기화 등)은 먼저 "처리 중"으로 답하고 결과를 나와의 채팅으로 보냅니다.
 
 ## 설치 & 배포
 
@@ -91,10 +70,6 @@ npm run db:migrate:remote
 
 # 비밀값 등록
 npx wrangler secret put ADMIN_TOKEN              # 관리자 웹 로그인용 임의 문자열
-npx wrangler secret put KAKAO_REST_API_KEY       # 카카오 개발자 앱 REST API 키
-npx wrangler secret put KAKAO_SKILL_SECRET       # 임의 문자열 (챗봇 스킬 URL의 key)
-npx wrangler secret put KAKAO_ALLOWED_USERS      # 챗봇이 알려 준 사용자 ID
-# (선택) 텔레그램
 npx wrangler secret put TELEGRAM_BOT_TOKEN       # @BotFather에서 발급
 npx wrangler secret put TELEGRAM_WEBHOOK_SECRET  # 임의 문자열 (영문/숫자/_-)
 npx wrangler secret put TOSS_ACCESS_KEY          # 토스플레이스 개발자센터 — 매출(주문 조회) 앱 키

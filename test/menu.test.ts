@@ -55,6 +55,6 @@ describe('병 + ml 입력과 표시', () => {
     expect(formatDelta(-750, gin)).toBe('-1병 + 50ml');
   });
   it('텔레그램 명령에서 병+ml', () => {
-    expect(parseCommand('/실사 핸드릭스 1병+300ml')).toEqual({ name: 'count', target: '핸드릭스', quantity: '1병+300ml' });
+    expect(parseCommand('/실사 핸드릭스 1병+300ml')).toMatchObject({ name: 'count', target: '핸드릭스', quantity: '1병+300ml' });
   });
 });

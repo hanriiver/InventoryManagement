@@ -53,11 +53,11 @@ async function hmacHex(secret: string, msg: string) {
 
 describe('telegram commands', () => {
   it('한글/영문 명령과 수량 분리', () => {
-    expect(parseCommand('/입고 핸드릭스 진 2')).toEqual({ name: 'restock', target: '핸드릭스 진', quantity: '2' });
-    expect(parseCommand('/count 레몬 12개')).toEqual({ name: 'count', target: '레몬', quantity: '12개' });
-    expect(parseCommand('/실사 핸드릭스 350 ml')).toEqual({ name: 'count', target: '핸드릭스', quantity: '350ml' });
-    expect(parseCommand('/재고')).toEqual({ name: 'stock', target: '', quantity: null });
-    expect(parseCommand('/stock@my_bot')).toEqual({ name: 'stock', target: '', quantity: null });
+    expect(parseCommand('/입고 핸드릭스 진 2')).toMatchObject({ name: 'restock', target: '핸드릭스 진', quantity: '2' });
+    expect(parseCommand('/count 레몬 12개')).toMatchObject({ name: 'count', target: '레몬', quantity: '12개' });
+    expect(parseCommand('/실사 핸드릭스 350 ml')).toMatchObject({ name: 'count', target: '핸드릭스', quantity: '350ml' });
+    expect(parseCommand('/재고')).toMatchObject({ name: 'stock', target: '', quantity: null });
+    expect(parseCommand('/stock@my_bot')).toMatchObject({ name: 'stock', target: '', quantity: null });
     expect(parseCommand('안녕')).toBeNull();
   });
 });

@@ -12,9 +12,6 @@ import { importMenusFromCatalog, importMenusFromOrders } from '../services/menu-
 import { seedHouseRecipes } from '../services/seed';
 import { TossClient, tossConfigured, tossMenuConfigured } from '../toss/client';
 import { setCommands, setWebhook, telegramConfigured } from '../telegram/api';
-import { buildAuthUrl, disconnect as kakaoDisconnect, kakaoConnected, kakaoKeyConfigured } from '../kakao/auth';
-import { sendKakaoMemo } from '../kakao/memo';
-import { allowedUsers } from '../kakao/skill';
 
 export const admin = new Hono<{ Bindings: Env }>();
 
@@ -28,7 +25,7 @@ admin.use('*', async (c, next) => {
 
 admin.onError((err, c) => c.json({ error: err.message }, 400));
 
-/** 화면에 내려줄 설정 (카카오 토큰 같은 비밀값 제외) */
+/** 화면에 내려줄 설정 (토큰 같은 비밀값 제외) */
 async function publicSettings(db: D1Database): Promise<Record<string, string>> {
   const all = await repo.getSettings(db);
   return Object.fromEntries(Object.entries(all).filter(([k]) => !/token|state|expires/.test(k)));
@@ -56,13 +53,6 @@ admin.get('/status', async (c) => {
     toss: tossConfigured(c.env),
     tossMenu: tossMenuConfigured(c.env),
     telegram: telegramConfigured(c.env),
-    kakao: {
-      restKey: kakaoKeyConfigured(c.env),
-      connected: await kakaoConnected(c.env),
-      skillSecret: Boolean(c.env.KAKAO_SKILL_SECRET),
-      allowedUsers: allowedUsers(c.env).length,
-      lastError: await repo.getSetting(c.env.DB, 'kakao_last_error'),
-    },
     tossWebhookSecret: Boolean(c.env.TOSS_WEBHOOK_SECRET),
     settings: await publicSettings(c.env.DB),
   });
@@ -404,17 +394,6 @@ admin.get('/toss/orders/:orderId/detail', async (c) => {
   return c.json({ normalized, error, raw });
 });
 admin.get('/toss/orders/:orderId/raw', async (c) => c.json(await new TossClient(c.env).getOrder(c.req.param('orderId'))));
-
-// ── 카카오톡 ─────────────────────────────────────────
-admin.get('/kakao/auth-url', async (c) => c.json({ url: await buildAuthUrl(c.env, new URL(c.req.url).origin) }));
-admin.post('/kakao/test', async (c) => {
-  await sendKakaoMemo(c.env, '🔔 테스트 메시지예요. 발주 알림과 마감 리포트가 여기로 옵니다.');
-  return c.json({ ok: true });
-});
-admin.post('/kakao/disconnect', async (c) => {
-  await kakaoDisconnect(c.env);
-  return c.json({ ok: true });
-});
 
 // ── 텔레그램 ─────────────────────────────────────────
 // 배포 후 한 번 호출: 이 Worker 주소로 텔레그램 웹훅 등록 + 명령 메뉴 등록
