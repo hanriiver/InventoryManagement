@@ -62,11 +62,14 @@ export class TossClient {
       headers: {
         'x-access-key': accessKey,
         'x-secret-key': secretKey,
+        accept: 'application/json',
         'content-type': 'application/json',
+        // Cloudflare Workers의 fetch는 User-Agent를 보내지 않아 방화벽에서 막히는 경우가 있어 명시
+        'user-agent': 'InventoryManagement/1.0 (+cloudflare-workers)',
       },
     });
     const text = await res.text();
-    if (!res.ok) throw new Error(`토스 API ${res.status} ${path}: ${text.slice(0, 300)}`);
+    if (!res.ok) throw new Error(describeError(res.status, path, text));
     return text ? JSON.parse(text) : null;
   }
 
@@ -81,4 +84,14 @@ export class TossClient {
   getOrder(orderId: string): Promise<unknown> {
     return this.request('sale', TOSS_PATHS.getOrder(this.merchantId, orderId));
   }
+}
+
+/** 토스 오류를 사람이 읽을 수 있게. HTML 차단 페이지면 원인 안내 */
+export function describeError(status: number, path: string, body: string): string {
+  const isHtml = /^\s*</.test(body);
+  if (isHtml && status === 403) {
+    return `토스가 이 서버의 요청을 차단했습니다 (403, ${path}). 토스 개발자센터에 허용 IP 설정이 있는지, 앱이 이 매장에 연결돼 있는지 확인해 주세요.`;
+  }
+  if (status === 401 || status === 403) return `토스 인증 실패 (${status}, ${path}): 키와 매장 ID, 앱 권한을 확인해 주세요. ${body.slice(0, 200)}`;
+  return `토스 API ${status} ${path}: ${isHtml ? '(HTML 응답)' : body.slice(0, 300)}`;
 }
