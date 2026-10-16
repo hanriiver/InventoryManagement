@@ -93,6 +93,10 @@ npm run deploy
 
 ## 로컬 개발
 
+배포 전 텔레그램 명령 시험: 터미널 두 개에서 `npm run dev`, `npm run bot:local`
+(텔레그램에 쌓인 메시지를 로컬 서버로 넘겨 줌. 배포 후 웹훅을 등록하면 쓰지 않음)
+
+
 ```bash
 cp .dev.vars.example .dev.vars   # 값 채우기
 npm run db:migrate:local
