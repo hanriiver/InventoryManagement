@@ -38,7 +38,7 @@ export const HOUSE_INGREDIENTS: SeedIngredient[] = [
   liquor('짐빔 라이', 700, '짐빔라이'),
   liquor('조니워커 블랙', 700, '조니워커블랙'),
   // 진
-  liquor('고든스 진', 700, '고든스진'),
+  liquor('고든스 진', 750, '고든스진'),
   liquor('헨드릭스 진', 700, '헨드릭스진'),
   // 베르무트·비터
   liquor('마티니 드라이', 750, '마티니드라이'),
@@ -46,7 +46,7 @@ export const HOUSE_INGREDIENTS: SeedIngredient[] = [
   liquor('캄파리', 700, '캄파리'),
   // 보드카·럼·데킬라
   liquor('티토스', 750, '티토스'),
-  liquor('바카디 화이트 럼', 700, '바카디화이트'),
+  liquor('바카디 화이트 럼', 750, '바카디화이트'),
   liquor('호세쿠엘보 실버', 750, '호세쿠엘보실버'),
   // 리큐르
   liquor('트리플 섹', 700, '트리플섹'),
@@ -56,7 +56,7 @@ export const HOUSE_INGREDIENTS: SeedIngredient[] = [
   liquor('피치트리', 700, '피치트리'),
   liquor('디사론노', 700, '디사론노'),
   liquor('크렘 드 카시스', 700, '크렘드카시스'),
-  liquor('론디아즈', 700, '론디아즈'),
+  liquor('론디아즈', 750, '론디아즈'),
   { name: '앙고스투라 비터즈', category: 'syrup', unit: 'ml', container_size: 200, container_label: '병', reorder_point: 0.3, order_alias: '앙고스투라비터즈' },
   // 시럽·주스·기타
   mixer('설탕 시럽', 1000, '설탕시럽'),
