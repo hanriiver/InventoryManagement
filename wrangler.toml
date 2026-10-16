@@ -11,8 +11,8 @@ run_worker_first = ["/api/*", "/webhook/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "inventory"
-# `npx wrangler d1 create inventory` 실행 후 출력되는 id로 교체하세요.
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+# Cloudflare 대시보드의 D1 "inventory" 데이터베이스 ID
+database_id = "9a538aaa-09d3-44bb-82aa-3c0ba7f2570a"
 migrations_dir = "migrations"
 
 # 15분마다: 토스 주문 동기화 + 마감 리포트 시각 확인 (UTC 기준이지만 시각 판단은 코드에서 KST로 처리)
