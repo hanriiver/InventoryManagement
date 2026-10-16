@@ -92,3 +92,12 @@ describe('메뉴 항목 찾기 (필드명이 다를 때)', () => {
     expect(o.items).toEqual([{ tossItemId: 'C1', name: '진토닉', quantity: 2, options: [{ tossItemId: null, name: '샷 추가', quantity: 1 }] }]);
   });
 });
+
+describe('토스 오류 메시지', async () => {
+  const { describeError } = await import('../src/toss/client');
+  it('HTML 403은 차단 안내', () => {
+    expect(describeError(403, '/x', '<html><title>403 Forbidden</title></html>')).toContain('차단');
+    expect(describeError(401, '/x', '{"error":"bad key"}')).toContain('인증 실패');
+    expect(describeError(500, '/x', '<html>err</html>')).toContain('HTML 응답');
+  });
+});
