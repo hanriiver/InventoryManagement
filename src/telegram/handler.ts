@@ -29,7 +29,7 @@ export async function handleTelegramUpdate(env: Env, update: TgUpdate): Promise<
   try {
     await sendMessage(env, await runCommand(env, msg.text));
   } catch (e) {
-    await sendMessage(env, `⚠️ ${(e as Error).message}`);
+    await sendMessage(env, `오류: ${(e as Error).message}`);
   }
 }
 
@@ -44,7 +44,7 @@ async function handleCallback(
   if (action === 'sent') {
     const ok = await markPurchaseOrderSent(env, id);
     await answerCallback(env, cq.id, ok ? '발주 완료로 표시했어요' : '이미 처리된 발주서예요');
-    if (ok) await editKeyboard(env, msg.chat.id, msg.message_id, [[{ text: '📦 입고 처리', callback_data: `po:recv:${id}` }]]);
+    if (ok) await editKeyboard(env, msg.chat.id, msg.message_id, [[{ text: '입고 처리', callback_data: `po:recv:${id}` }]]);
     return;
   }
   if (action === 'recv') {

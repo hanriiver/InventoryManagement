@@ -26,7 +26,7 @@ export async function buildDailyReport(env: Env, now = new Date()): Promise<stri
   const ingredients = await repo.listIngredients(db);
   const byId = new Map(ingredients.map((i) => [i.id, i]));
 
-  const out = [`🌙 마감 리포트 ${day} (${formatKst(now)} 기준)`, `완료 주문: ${orders?.n ?? 0}건`, ''];
+  const out = [`마감 리포트 ${day} (${formatKst(now)} 기준)`, `완료 주문: ${orders?.n ?? 0}건`, ''];
   if (usage.length) {
     out.push('[오늘 사용량]');
     for (const u of usage) {

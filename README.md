@@ -5,7 +5,7 @@
 
 - 런타임: Cloudflare Workers (Hono) + D1(SQLite) + Cron Triggers — 무료 플랜으로 운영 가능
 - 알림/조작: 텔레그램 봇
-- 관리자 웹: 같은 Worker가 `public/` 정적 파일로 제공
+- 관리자 웹: 같은 Worker가 `public/` 정적 파일로 제공 (재고 / 입고·실사 / 메뉴 / 기록 / 설정, 휴대폰에서는 아래 탭)
 
 ```
 [토스플레이스] ─웹훅(결제 승인/취소)─┐
@@ -58,7 +58,7 @@
 /발주완료 12, /입고처리 12
 /리포트, /동기화, /도움
 ```
-발주서 메시지의 `✅ 발주 완료` / `📦 입고 처리` 버튼으로 상태 변경 및 입고가 한 번에 됩니다.
+발주서 메시지의 `발주 완료` / `입고 처리` 버튼으로 상태 변경 및 입고가 한 번에 됩니다.
 
 ## 설치 & 배포
 
@@ -76,7 +76,7 @@ npx wrangler secret put TOSS_ACCESS_KEY          # 토스플레이스 개발자�
 npx wrangler secret put TOSS_SECRET_KEY
 npx wrangler secret put TOSS_MENU_ACCESS_KEY     # 메뉴(상품 조회) 앱 키. 앱 하나로 둘 다 되면 생략
 npx wrangler secret put TOSS_MENU_SECRET_KEY
-npx wrangler secret put TOSS_MERCHANT_ID         # ⚠️ POS 로그인용 10자리 매장번호와 다른 값
+npx wrangler secret put TOSS_MERCHANT_ID         # POS 로그인용 10자리 매장번호와 다른 값
 npx wrangler secret put TOSS_WEBHOOK_SECRET      # 웹훅 서명 secret
 
 npm run deploy

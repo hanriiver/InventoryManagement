@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import * as repo from '../db/repo';
 import { TossClient, tossConfigured } from '../toss/client';
 import { extractOrderList, normalizeOrder, type NormalizedOrder } from '../toss/normalize';
-import { processOrder, type ProcessResult } from './inventory';
+import { loadOrderCatalog, processOrder, type OrderCatalog, type ProcessResult } from './inventory';
 
 /** 주문 단건을 토스에서 다시 조회해 반영 (웹훅 본문은 신뢰하지 않음) */
 export async function syncOrderById(env: Env, orderId: string): Promise<ProcessResult> {
@@ -24,6 +24,7 @@ export async function syncRecentOrders(env: Env, pages = 1): Promise<ProcessResu
   if (!(await repo.getSetting(env.DB, 'sync_baseline_at'))) return markBaseline(env);
   const client = new TossClient(env);
   const results: ProcessResult[] = [];
+  let catalog: OrderCatalog | undefined; // 바뀐 주문이 있을 때만 한 번 읽음
   for (let page = 1; page <= pages; page++) {
     const list = extractOrderList(await client.listOrders(page, 100));
     for (const entry of list) {
@@ -41,7 +42,8 @@ export async function syncRecentOrders(env: Env, pages = 1): Promise<ProcessResu
         raw = await client.getOrder(order.orderId);
         order = normalizeOrder(raw);
       }
-      results.push(await processOrder(env, order, raw));
+      catalog ??= await loadOrderCatalog(env.DB);
+      results.push(await processOrder(env, order, raw, catalog));
     }
     if (list.length < 100) break;
   }

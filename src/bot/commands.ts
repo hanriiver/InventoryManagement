@@ -39,10 +39,10 @@ export async function runCommand(env: Env, text: string): Promise<string> {
       const all = await repo.listIngredients(env.DB);
       const empty = all.filter((i) => i.stock <= 0);
       const low = all.filter((i) => i.stock > 0 && needsReorder(i));
-      if (!empty.length && !low.length) return '✅ 부족한 재료가 없습니다';
+      if (!empty.length && !low.length) return '부족한 재료가 없습니다';
       const out: string[] = [];
-      if (empty.length) out.push(`⛔ 재고 없음 ${empty.length}`, ...empty.map((i) => `· ${i.name}`), '');
-      if (low.length) out.push(`⚠️ 발주 기준 이하 ${low.length}`, ...low.map(stockLine), '');
+      if (empty.length) out.push(`[재고 없음] ${empty.length}개`, ...empty.map((i) => `· ${i.name}`), '');
+      if (low.length) out.push(`[발주 필요] ${low.length}개`, ...low.map(stockLine), '');
       const lines = [...empty, ...low].map(toOrderLine);
       out.push('▼ 발주서 (복사용)', ...lines.map((l) => `${l.name} ${l.qty}`), '', '발주서를 저장하려면 /발주');
       return out.join('\n');
@@ -62,7 +62,7 @@ export async function runCommand(env: Env, text: string): Promise<string> {
       const unitText = spec.unit === 'ml' ? `${spec.container_size}ml ${spec.container_label}` : `${spec.container_label} 단위`;
       const reorder = spec.unit === 'ml' ? `1${spec.container_label}` : `5${spec.container_label}`;
       return [
-        `➕ 재료 등록: ${spec.name} (${unitText})`,
+        `재료 등록: ${spec.name} (${unitText})`,
         `발주 알림 기준: ${reorder} 이하 (관리자 웹 재료 탭에서 변경)`,
         '',
         `지금 재고는 0이에요. 들어온 양을 입고하세요:`,
@@ -81,9 +81,9 @@ export async function runCommand(env: Env, text: string): Promise<string> {
           const ing = await resolveIngredient(env, item.name);
           const amount = parseQuantity(item.quantity!, ing);
           const after = await addMovement(env, ing.id, amount, 'RESTOCK', '텔레그램 입고');
-          out.push(`📦 ${ing.name} +${formatStock(amount, ing)} → 현재 ${formatStock(after.stock, after)}`);
+          out.push(`입고 ${ing.name} +${formatStock(amount, ing)} → 현재 ${formatStock(after.stock, after)}`);
         } catch (e) {
-          out.push(`⚠️ ${item.name}: ${(e as Error).message}`);
+          out.push(`실패 ${item.name}: ${(e as Error).message}`);
         }
       }
       return out.join('\n');
@@ -94,23 +94,23 @@ export async function runCommand(env: Env, text: string): Promise<string> {
       const actual = parseQuantity(cmd.quantity, ing);
       const after = await setActualStock(env, ing.id, actual);
       const diff = actual - ing.stock;
-      return `📝 실사 보정: ${ing.name}\n${formatStock(ing.stock, ing)} → ${formatStock(after.stock, after)} (차이 ${diff >= 0 ? '+' : ''}${Math.round(diff * 100) / 100})`;
+      return `실사 보정: ${ing.name}\n${formatStock(ing.stock, ing)} → ${formatStock(after.stock, after)} (차이 ${diff >= 0 ? '+' : ''}${Math.round(diff * 100) / 100})`;
     }
     case 'order': {
       const id = await issueReorderForAllLow(env);
-      return id ? `발주서 #${id}를 보냈습니다.` : '✅ 기준 이하인 재료가 없습니다.';
+      return id ? `발주서 #${id}를 보냈습니다.` : '기준 이하인 재료가 없습니다.';
     }
     case 'report':
       return buildDailyReport(env);
     case 'sync': {
       if (!tossConfigured(env)) return '토스 API 키가 아직 설정되지 않았습니다.';
       const r = await syncRecentOrders(env);
-      return `🔄 동기화 완료: 변경된 주문 ${r.length}건`;
+      return `동기화 완료: 변경된 주문 ${r.length}건`;
     }
     case 'po_sent': {
       const id = Number(cmd.target.replace('#', ''));
       if (!id) throw new Error('사용법: 발주완료 발주서번호  (예: 발주완료 12)');
-      return (await markPurchaseOrderSent(env, id)) ? `✅ 발주 #${id}를 발주 완료로 표시했어요` : `발주 #${id}는 이미 처리됐거나 없는 발주서예요`;
+      return (await markPurchaseOrderSent(env, id)) ? `발주 #${id}를 발주 완료로 표시했어요` : `발주 #${id}는 이미 처리됐거나 없는 발주서예요`;
     }
     case 'po_recv': {
       const id = Number(cmd.target.replace('#', ''));
@@ -126,6 +126,6 @@ export function markPurchaseOrderSent(env: Env, id: number): Promise<boolean> {
 }
 
 export function receivedText(id: number, lines: PurchaseOrderLine[]): string {
-  return `📦 발주 #${id} 입고 완료\n${lines.map((l) => `${l.name} +${l.qty}${l.label}`).join('\n')}`;
+  return `발주 #${id} 입고 완료\n${lines.map((l) => `${l.name} +${l.qty}${l.label}`).join('\n')}`;
 }
 

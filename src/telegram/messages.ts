@@ -7,7 +7,7 @@ import { formatKst } from '../domain/time';
 export function purchaseOrderText(id: number, lines: PurchaseOrderLine[], now = new Date()): string {
   const manual = lines.filter((l) => l.supplier !== 'coupang');
   const coupang = lines.filter((l) => l.supplier === 'coupang');
-  const out = [`🚨 발주 필요 #${id} (${formatKst(now)})`, ''];
+  const out = [`[발주 필요] #${id} (${formatKst(now)})`, ''];
   if (manual.length) {
     out.push('▼ 아래를 그대로 복사해 발주하세요');
     out.push(...manual.map((l) => `${l.name} ${l.qty}`));
@@ -22,31 +22,31 @@ export function purchaseOrderText(id: number, lines: PurchaseOrderLine[], now = 
 
 export function purchaseOrderKeyboard(id: number): InlineKeyboard {
   return [[
-    { text: '✅ 발주 완료', callback_data: `po:sent:${id}` },
-    { text: '📦 입고 처리', callback_data: `po:recv:${id}` },
+    { text: '발주 완료', callback_data: `po:sent:${id}` },
+    { text: '입고 처리', callback_data: `po:recv:${id}` },
   ]];
 }
 
 export function stockLine(i: Ingredient): string {
-  if (i.stock <= 0) return `⛔ ${i.name}: 재고 없음${i.stock < 0 ? ` (장부상 ${formatStock(-i.stock, i)} 초과 사용 — 실사로 현재 양 입력)` : ''}`;
-  const warn = needsReorder(i) ? '⚠️ ' : '';
-  return `${warn}${i.name}: ${formatStock(i.stock, i)}`;
+  if (i.stock <= 0) return `${i.name}: 재고 없음${i.stock < 0 ? ` (장부상 ${formatStock(-i.stock, i)} 초과 사용, /실사로 맞춰 주세요)` : ''}`;
+  return `${i.name}: ${formatStock(i.stock, i)}${needsReorder(i) ? ' (부족)' : ''}`;
 }
 
 export function stockListText(ingredients: Ingredient[]): string {
   if (!ingredients.length) return '등록된 재료가 없습니다. 관리자 웹에서 재료를 먼저 등록하세요.';
-  const groups = new Map<string, Ingredient[]>();
-  for (const i of ingredients) groups.set(i.category, [...(groups.get(i.category) ?? []), i]);
-  const label: Record<string, string> = { liquor: '🍾 술', beer: '🍺 맥주', fruit: '🍋 과일', syrup: '🍯 시럽', etc: '📦 기타' };
+  const order = ['liquor', 'beer', 'syrup', 'fruit', 'etc'];
+  const label: Record<string, string> = { liquor: '술', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
+  const rank = (c: string) => (order.includes(c) ? order.indexOf(c) : order.length);
+  const cats = [...new Set(ingredients.map((i) => i.category))].sort((a, b) => rank(a) - rank(b));
   const out: string[] = [];
-  for (const [cat, list] of groups) {
-    out.push(`[${label[cat] ?? cat}]`, ...list.map(stockLine), '');
+  for (const cat of cats) {
+    out.push(`[${label[cat] ?? cat}]`, ...ingredients.filter((i) => i.category === cat).map(stockLine), '');
   }
   return out.join('\n').trim();
 }
 
 export const HELP_TEXT = [
-  '📋 명령어 (앞에 / 는 붙여도 되고 안 붙여도 됩니다)',
+  '명령어 (앞에 / 는 붙여도 되고 안 붙여도 됩니다)',
   '',
   '[재고 보기]',
   '/재고 — 전체 재고',

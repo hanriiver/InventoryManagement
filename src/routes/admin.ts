@@ -4,7 +4,7 @@ import * as repo from '../db/repo';
 import { containersRounded, formatDelta, formatStock, parseQuantity, toBaseUnit } from '../domain/units';
 import { needsReorder } from '../domain/reorder';
 import { parseHHMM } from '../domain/time';
-import { addMovement, issueReorderForAllLow, processOrder, setActualStock } from '../services/inventory';
+import { addMovement, applyBulk, issueReorderForAllLow, processOrder, receivePurchaseOrder, setActualStock, type BulkMode } from '../services/inventory';
 import { sendDailyReport } from '../services/report';
 import { markBaseline, syncOrderById, syncRecentOrders } from '../services/toss-sync';
 import { normalizeOrder } from '../toss/normalize';
@@ -139,6 +139,15 @@ admin.post('/ingredients/:id/waste', async (c) => {
   if (!ing) return c.json({ error: 'not found' }, 404);
   const { quantity, note } = await c.req.json<{ quantity: string; note?: string }>();
   return c.json(view(await addMovement(c.env, ing.id, -parseQuantity(String(quantity), ing), 'WASTE', note ?? '폐기')));
+});
+
+// 여러 재료 한 번에: { mode: 'restock'|'count'|'waste', items: [{ id, quantity: "2" | "1병+300ml" }] }
+admin.post('/stock/bulk', async (c) => {
+  const { mode, items } = await c.req.json<{ mode: BulkMode; items: { id: number; quantity: string }[] }>();
+  if (!['restock', 'count', 'waste'].includes(mode)) throw new Error('mode는 restock, count, waste 중 하나');
+  if (!Array.isArray(items) || !items.length) throw new Error('입력한 재료가 없습니다');
+  const changed = await applyBulk(c.env, mode, items.map((i) => ({ id: Number(i.id), quantity: String(i.quantity) })), parseQuantity);
+  return c.json({ changed: changed.length, items: changed });
 });
 
 // ── 메뉴 / 레시피 ────────────────────────────────────
@@ -315,6 +324,18 @@ admin.get('/purchase-orders', async (c) => {
 });
 
 admin.post('/purchase-orders', async (c) => c.json({ id: await issueReorderForAllLow(c.env) }));
+
+admin.post('/purchase-orders/:id/sent', async (c) => {
+  const ok = await repo.setPurchaseOrderStatus(c.env.DB, Number(c.req.param('id')), 'SENT', ['DRAFT']);
+  if (!ok) throw new Error('이미 처리된 발주서입니다');
+  return c.json({ ok });
+});
+
+admin.post('/purchase-orders/:id/receive', async (c) => {
+  const lines = await receivePurchaseOrder(c.env, Number(c.req.param('id')));
+  if (!lines) throw new Error('이미 입고된 발주서입니다');
+  return c.json({ lines });
+});
 
 // ── 설정 ─────────────────────────────────────────────
 admin.get('/settings', async (c) => c.json(await publicSettings(c.env.DB)));
