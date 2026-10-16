@@ -13,6 +13,14 @@ export interface Env {
   TELEGRAM_CHAT_ID?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   ADMIN_TOKEN?: string;
+  /** 카카오 개발자 앱 REST API 키 (나에게 보내기 알림) */
+  KAKAO_REST_API_KEY?: string;
+  /** 카카오 앱에서 Client Secret을 켰을 때만 */
+  KAKAO_CLIENT_SECRET?: string;
+  /** 오픈빌더 스킬 URL의 ?key= 값 (명령 받기 보안) */
+  KAKAO_SKILL_SECRET?: string;
+  /** 명령을 허용할 카카오 챗봇 사용자 ID (쉼표로 여러 명) */
+  KAKAO_ALLOWED_USERS?: string;
 }
 
 export type BaseUnit = 'ml' | 'ea' | 'g';

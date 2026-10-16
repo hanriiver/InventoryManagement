@@ -3,7 +3,7 @@ import * as repo from '../db/repo';
 import { computeConsumption, diffMovements } from '../domain/reconcile';
 import { alertTransition, needsReorder, toOrderLine } from '../domain/reorder';
 import type { NormalizedOrder } from '../toss/normalize';
-import { sendMessage } from '../telegram/api';
+import { notify } from '../notify';
 import { purchaseOrderKeyboard, purchaseOrderText } from '../telegram/messages';
 import { suppliers } from '../suppliers';
 
@@ -58,10 +58,9 @@ export async function processOrder(env: Env, order: NormalizedOrder, raw: unknow
     if (await repo.recordUnmapped(db, u, order.orderId)) newUnmapped.push(u.name);
   }
   if (newUnmapped.length) {
-    await sendMessage(
-      env,
-      `❓ 레시피가 없는 메뉴가 판매됐어요 (재고 차감 안 됨)\n${newUnmapped.map((n) => `· ${n}`).join('\n')}\n\n관리자 웹 > 메뉴/레시피에서 등록해 주세요.`,
-    );
+    await notify(env, {
+      text: `❓ 레시피가 없는 메뉴가 판매됐어요 (재고 차감 안 됨)\n${newUnmapped.map((n) => `· ${n}`).join('\n')}\n\n관리자 웹 > 메뉴/레시피에서 등록해 주세요.`,
+    });
   }
 
   if (changed.length) await checkReorder(env, changed.map((c) => c.ingredientId));
@@ -96,7 +95,12 @@ export async function issuePurchaseOrder(env: Env, lines: PurchaseOrderLine[]): 
     const r = await suppliers.coupang.placeOrder(env, coupangLines);
     if (r.placed) extra = `\n\n🛒 쿠팡 자동주문 완료: ${r.message}`;
   }
-  await sendMessage(env, purchaseOrderText(id, lines) + extra, purchaseOrderKeyboard(id));
+  const text = purchaseOrderText(id, lines) + extra;
+  await notify(env, {
+    text,
+    short: `${text}\n\n입고되면 채널에 "입고처리 ${id}"`,
+    buttons: purchaseOrderKeyboard(id),
+  });
   return id;
 }
 

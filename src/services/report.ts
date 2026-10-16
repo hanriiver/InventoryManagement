@@ -3,7 +3,7 @@ import * as repo from '../db/repo';
 import { businessDay, businessDayStartUtc, formatKst, isReportDue } from '../domain/time';
 import { formatStock } from '../domain/units';
 import { needsReorder, toOrderLine } from '../domain/reorder';
-import { sendMessage } from '../telegram/api';
+import { notify } from '../notify';
 import { stockListText } from '../telegram/messages';
 
 export async function buildDailyReport(env: Env, now = new Date()): Promise<string> {
@@ -44,8 +44,29 @@ export async function buildDailyReport(env: Env, now = new Date()): Promise<stri
   return out.join('\n');
 }
 
+/** 카카오톡용 요약 (메시지당 200자라 핵심만): 주문 수, 재고 없음, 발주 필요 */
+export async function buildDailyReportShort(env: Env, now = new Date()): Promise<string> {
+  const db = env.DB;
+  const settings = await repo.getSettings(db);
+  const start = businessDayStartUtc(now, settings.business_day_start || '06:00');
+  const day = businessDay(now, settings.business_day_start || '06:00');
+  const orders = await db
+    .prepare(`SELECT COUNT(*) AS n FROM sales_orders WHERE status = 'COMPLETED' AND first_seen >= ?`)
+    .bind(start)
+    .first<{ n: number }>();
+  const ingredients = await repo.listIngredients(db);
+  const empty = ingredients.filter((i) => i.stock <= 0);
+  const low = ingredients.filter((i) => i.stock > 0 && needsReorder(i));
+  const out = [`🌙 마감 리포트 ${day}`, `완료 주문 ${orders?.n ?? 0}건`];
+  if (empty.length) out.push('', `⛔ 재고 없음 ${empty.length}`, ...empty.map((i) => `· ${i.name}`));
+  if (low.length) out.push('', `⚠️ 발주 필요 ${low.length}`, ...low.map((i) => { const l = toOrderLine(i); return `${l.name} ${l.qty}`; }));
+  if (!empty.length && !low.length) out.push('', '✅ 부족한 재료 없음');
+  out.push('', '전체 재고는 관리자 웹에서 확인하세요');
+  return out.join('\n');
+}
+
 export async function sendDailyReport(env: Env, now = new Date()): Promise<void> {
-  await sendMessage(env, await buildDailyReport(env, now));
+  await notify(env, { text: await buildDailyReport(env, now), short: await buildDailyReportShort(env, now) });
 }
 
 /** 크론에서 호출: 마감 시각이 지났고 오늘 아직 안 보냈으면 전송 */

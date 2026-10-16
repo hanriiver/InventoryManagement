@@ -28,7 +28,7 @@ export function purchaseOrderKeyboard(id: number): InlineKeyboard {
 }
 
 export function stockLine(i: Ingredient): string {
-  if (i.stock <= 0) return `⛔ ${i.name}: 재고 없음${i.stock < 0 ? ` (장부상 ${formatStock(-i.stock, i)} 초과 사용 — /실사로 현재 양 입력)` : ''}`;
+  if (i.stock <= 0) return `⛔ ${i.name}: 재고 없음${i.stock < 0 ? ` (장부상 ${formatStock(-i.stock, i)} 초과 사용 — 실사로 현재 양 입력)` : ''}`;
   const warn = needsReorder(i) ? '⚠️ ' : '';
   return `${warn}${i.name}: ${formatStock(i.stock, i)}`;
 }
@@ -46,16 +46,17 @@ export function stockListText(ingredients: Ingredient[]): string {
 }
 
 export const HELP_TEXT = [
-  '📋 사용 가능한 명령',
-  '/재고 [이름] — 재고 현황 (/stock)',
-  '/입고 이름 수량 — 입고. 수량은 병/개 단위, 350ml처럼 ml도 가능 (/restock)',
-  '/실사 이름 수량 — 실제 남은 양으로 보정 (/count)',
-  '/발주 — 기준 이하 재료로 발주서 생성 (/order)',
-  '/리포트 — 오늘 영업 리포트 (/report)',
-  '/동기화 — 토스 주문 즉시 동기화 (/sync)',
+  '📋 사용 가능한 명령 (앞에 / 는 붙여도 되고 안 붙여도 됩니다)',
+  '재고 [이름] — 재고 현황',
+  '입고 이름 수량 — 입고. 수량은 병/개 단위, 350ml처럼 ml도 가능',
+  '실사 이름 수량 — 실제 남은 양으로 보정',
+  '발주 — 기준 이하 재료로 발주서 만들기',
+  '발주완료 번호 / 입고처리 번호 — 발주서 상태 변경',
+  '리포트 — 오늘 영업 리포트',
+  '동기화 — 토스 주문 즉시 동기화',
   '',
-  '예) /입고 핸드릭스진 2',
-  '예) /실사 레몬 12',
-  '예) /실사 핸드릭스 1.5   (1.5병)',
-  '예) /실사 핸드릭스 1병+300ml',
+  '예) 입고 고든스진 2',
+  '예) 실사 레몬 12',
+  '예) 실사 헨드릭스 1병+300ml',
+  '예) 입고처리 12',
 ].join('\n');
