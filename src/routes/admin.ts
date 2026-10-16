@@ -1,13 +1,16 @@
 import { Hono } from 'hono';
 import type { Env, Ingredient } from '../types';
 import * as repo from '../db/repo';
-import { formatStock, parseQuantity, toBaseUnit } from '../domain/units';
+import { containersRounded, formatDelta, formatStock, parseQuantity, toBaseUnit } from '../domain/units';
 import { needsReorder } from '../domain/reorder';
 import { parseHHMM } from '../domain/time';
-import { addMovement, issueReorderForAllLow, processOrder, setActualStock } from '../services/inventory';
+import { addMovement, applyBulk, issueReorderForAllLow, processOrder, receivePurchaseOrder, setActualStock, type BulkMode } from '../services/inventory';
 import { sendDailyReport } from '../services/report';
-import { syncOrderById, syncRecentOrders } from '../services/toss-sync';
-import { TossClient, tossConfigured } from '../toss/client';
+import { markBaseline, syncOrderById, syncRecentOrders } from '../services/toss-sync';
+import { normalizeOrder } from '../toss/normalize';
+import { importMenusFromCatalog, importMenusFromOrders } from '../services/menu-import';
+import { seedHouseRecipes } from '../services/seed';
+import { TossClient, tossConfigured, tossMenuConfigured } from '../toss/client';
 import { setCommands, setWebhook, telegramConfigured } from '../telegram/api';
 
 export const admin = new Hono<{ Bindings: Env }>();
@@ -22,15 +25,36 @@ admin.use('*', async (c, next) => {
 
 admin.onError((err, c) => c.json({ error: err.message }, 400));
 
-const view = (i: Ingredient) => ({ ...i, display: formatStock(i.stock, i), low: needsReorder(i) });
+/** 화면에 내려줄 설정 (토큰 같은 비밀값 제외) */
+async function publicSettings(db: D1Database): Promise<Record<string, string>> {
+  const all = await repo.getSettings(db);
+  return Object.fromEntries(Object.entries(all).filter(([k]) => !/token|state|expires/.test(k)));
+}
+
+const view = (i: Ingredient) => {
+  const containers = containersRounded(i.stock, i);
+  const status = i.stock <= 0 ? 'empty' : needsReorder(i) ? 'low' : 'ok';
+  // 게이지 기준: 적정재고, 없으면 발주기준의 3배 (최소 현재고)
+  const full = Math.max(i.par_level ?? i.reorder_point * 3, containers, 1);
+  return {
+    ...i,
+    display: i.stock <= 0 ? '재고 없음' : formatStock(i.stock, i),
+    shortage: i.stock < 0 ? formatStock(-i.stock, i) : null,
+    containers,
+    status,
+    low: status !== 'ok',
+    gauge: { percent: Math.max(0, Math.min(100, (containers / full) * 100)), reorderPercent: Math.min(100, (i.reorder_point / full) * 100) },
+  };
+};
 
 // ── 상태 ─────────────────────────────────────────────
 admin.get('/status', async (c) => {
   return c.json({
     toss: tossConfigured(c.env),
+    tossMenu: tossMenuConfigured(c.env),
     telegram: telegramConfigured(c.env),
     tossWebhookSecret: Boolean(c.env.TOSS_WEBHOOK_SECRET),
-    settings: await repo.getSettings(c.env.DB),
+    settings: await publicSettings(c.env.DB),
   });
 });
 
@@ -45,12 +69,13 @@ function ingredientValues(body: Record<string, unknown>) {
   if (!v.name) throw new Error('이름을 입력하세요');
   if (!['ml', 'ea', 'g'].includes(String(v.unit ?? 'ml'))) throw new Error('단위는 ml, ea, g 중 하나');
   if (!['manual', 'coupang'].includes(String(v.supplier ?? 'manual'))) throw new Error('공급처는 manual, coupang 중 하나');
+  const unit = (v.unit as string | null) ?? 'ml';
   return {
     ...v,
     category: v.category ?? 'liquor',
-    unit: v.unit ?? 'ml',
-    container_size: v.unit === 'ml' ? Number(v.container_size ?? 700) : 1,
-    container_label: v.container_label ?? (v.unit === 'ml' ? '병' : '개'),
+    unit,
+    container_size: unit === 'ml' ? Number(v.container_size ?? 700) : 1,
+    container_label: v.container_label ?? (unit === 'ml' ? '병' : '개'),
     reorder_point: Number(v.reorder_point ?? 1),
     supplier: v.supplier ?? 'manual',
   };
@@ -116,27 +141,61 @@ admin.post('/ingredients/:id/waste', async (c) => {
   return c.json(view(await addMovement(c.env, ing.id, -parseQuantity(String(quantity), ing), 'WASTE', note ?? '폐기')));
 });
 
+// 여러 재료 한 번에: { mode: 'restock'|'count'|'waste', items: [{ id, quantity: "2" | "1병+300ml" }] }
+admin.post('/stock/bulk', async (c) => {
+  const { mode, items } = await c.req.json<{ mode: BulkMode; items: { id: number; quantity: string }[] }>();
+  if (!['restock', 'count', 'waste'].includes(mode)) throw new Error('mode는 restock, count, waste 중 하나');
+  if (!Array.isArray(items) || !items.length) throw new Error('입력한 재료가 없습니다');
+  const changed = await applyBulk(c.env, mode, items.map((i) => ({ id: Number(i.id), quantity: String(i.quantity) })), parseQuantity);
+  return c.json({ changed: changed.length, items: changed });
+});
+
 // ── 메뉴 / 레시피 ────────────────────────────────────
 admin.get('/menu-items', async (c) => {
-  const [menus, recipes] = await Promise.all([repo.listMenuItems(c.env.DB), repo.listRecipes(c.env.DB)]);
-  return c.json(menus.map((m) => ({ ...m, recipe: recipes.filter((r) => r.menu_item_id === m.id) })));
+  const [menus, recipes, ingredients] = await Promise.all([
+    repo.listMenuItems(c.env.DB),
+    repo.listRecipes(c.env.DB),
+    repo.listIngredients(c.env.DB),
+  ]);
+  const ingName = new Map(ingredients.map((i) => [i.id, i.name]));
+  return c.json(
+    menus.map((m) => {
+      const recipe = recipes.filter((r) => r.menu_item_id === m.id);
+      return {
+        ...m,
+        recipe,
+        recipe_summary: recipe.map((r) => `${ingName.get(r.ingredient_id) ?? '?'} ${r.amount}${r.unit === 'ea' ? '개' : r.unit}`).join(', '),
+        state: !m.active ? 'ignored' : recipe.length ? 'done' : 'todo',
+      };
+    }),
+  );
 });
 
 admin.post('/menu-items', async (c) => {
-  const b = await c.req.json<{ name: string; toss_item_id?: string; active?: boolean }>();
+  const b = await c.req.json<{ name: string; toss_item_id?: string; active?: boolean; category?: string }>();
   if (!b.name) throw new Error('메뉴 이름을 입력하세요');
   const row = await c.env.DB
-    .prepare('INSERT INTO menu_items (name, toss_item_id, active) VALUES (?, ?, ?) RETURNING *')
-    .bind(b.name, b.toss_item_id || null, b.active === false ? 0 : 1)
+    .prepare('INSERT INTO menu_items (name, toss_item_id, active, category) VALUES (?, ?, ?, ?) RETURNING *')
+    .bind(b.name, b.toss_item_id || null, b.active === false ? 0 : 1, b.category || null)
     .first();
   return c.json(row, 201);
 });
 
-admin.put('/menu-items/:id', async (c) => {
-  const b = await c.req.json<{ name: string; toss_item_id?: string; active?: boolean }>();
+// 일부 필드만 수정: { name?, toss_item_id?, active?, category? }
+admin.patch('/menu-items/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const cur = (await repo.listMenuItems(c.env.DB)).find((m) => m.id === id);
+  if (!cur) return c.json({ error: 'not found' }, 404);
+  const b = await c.req.json<{ name?: string; toss_item_id?: string | null; active?: boolean; category?: string | null }>();
   const row = await c.env.DB
-    .prepare('UPDATE menu_items SET name = ?, toss_item_id = ?, active = ? WHERE id = ? RETURNING *')
-    .bind(b.name, b.toss_item_id || null, b.active === false ? 0 : 1, Number(c.req.param('id')))
+    .prepare('UPDATE menu_items SET name = ?, toss_item_id = ?, active = ?, category = ? WHERE id = ? RETURNING *')
+    .bind(
+      b.name ?? cur.name,
+      b.toss_item_id !== undefined ? b.toss_item_id || null : cur.toss_item_id,
+      b.active !== undefined ? (b.active ? 1 : 0) : cur.active,
+      b.category !== undefined ? b.category || null : cur.category ?? null,
+      id,
+    )
     .first();
   return c.json(row);
 });
@@ -168,6 +227,25 @@ admin.put('/menu-items/:id/recipe', async (c) => {
   return c.json({ ok: true });
 });
 
+// 메뉴·레시피·재료·재고 기록 전부 삭제 (토스 주문 기록과 설정은 유지 → 지난 주문이 다시 차감되지 않음)
+admin.post('/reset', async (c) => {
+  const { confirm } = await c.req.json<{ confirm?: string }>().catch(() => ({ confirm: undefined }));
+  if (confirm !== '초기화') throw new Error("확인 문구 '초기화'가 필요합니다");
+  const db = c.env.DB;
+  await db.batch([
+    db.prepare('DELETE FROM recipe_lines'),
+    db.prepare('DELETE FROM stock_movements'),
+    db.prepare('DELETE FROM purchase_orders'),
+    db.prepare('DELETE FROM unmapped_items'),
+    db.prepare('DELETE FROM menu_items'),
+    db.prepare('DELETE FROM ingredients'),
+  ]);
+  return c.json({ ok: true });
+});
+
+// 가게 레시피(문서 기준) 한 번에 등록: ?overwrite=1 이면 기존 레시피도 덮어씀
+admin.post('/seed/house-recipes', async (c) => c.json(await seedHouseRecipes(c.env, c.req.query('overwrite') === '1')));
+
 // 토스 연동 전 테스트용 수동 판매: { menu_item_id, quantity }
 admin.post('/sales/manual', async (c) => {
   const { menu_item_id, quantity } = await c.req.json<{ menu_item_id: number; quantity?: number }>();
@@ -192,19 +270,47 @@ admin.post('/sales/:orderId/cancel', async (c) => {
 // ── 기록 / 발주 ──────────────────────────────────────
 admin.get('/movements', async (c) => {
   const limit = Math.min(Number(c.req.query('limit') ?? 100), 500);
+  const ingredientId = c.req.query('ingredient_id');
+  // balance: 그 변동 직후 남은 양 (재료별 누적합)
   const { results } = await c.env.DB
     .prepare(
-      `SELECT m.*, i.name AS ingredient_name FROM stock_movements m
-       JOIN ingredients i ON i.id = m.ingredient_id ORDER BY m.id DESC LIMIT ?`,
+      `SELECT * FROM (
+         SELECT m.*, i.name AS ingredient_name,
+                SUM(m.delta) OVER (PARTITION BY m.ingredient_id ORDER BY m.id) AS balance
+         FROM stock_movements m JOIN ingredients i ON i.id = m.ingredient_id
+       ) WHERE (? IS NULL OR ingredient_id = ?) ORDER BY id DESC LIMIT ?`,
     )
-    .bind(limit)
-    .all();
-  return c.json(results);
+    .bind(ingredientId ?? null, ingredientId ? Number(ingredientId) : null, limit)
+    .all<{ ingredient_id: number; delta: number; balance: number }>();
+  const ings = new Map((await repo.listIngredients(c.env.DB)).map((i) => [i.id, i]));
+  return c.json(
+    results.map((r) => {
+      const ing = ings.get(r.ingredient_id);
+      return {
+        ...r,
+        delta_display: ing ? formatDelta(r.delta, ing) : String(r.delta),
+        balance_display: ing ? (r.balance <= 0 ? `재고 없음${r.balance < 0 ? ` (${formatStock(-r.balance, ing)} 초과)` : ''}` : formatStock(r.balance, ing)) : '',
+      };
+    }),
+  );
 });
 
 admin.get('/unmapped', async (c) => {
   const { results } = await c.env.DB.prepare('SELECT * FROM unmapped_items ORDER BY last_seen DESC').all();
   return c.json(results);
+});
+
+// 미등록 판매 메뉴를 메뉴로 등록 (이후 레시피만 입력)
+admin.post('/unmapped/:key/register', async (c) => {
+  const key = c.req.param('key');
+  const u = await c.env.DB.prepare('SELECT * FROM unmapped_items WHERE key = ?').bind(key).first<{ name: string; toss_item_id: string | null }>();
+  if (!u) return c.json({ error: 'not found' }, 404);
+  const exists = (await repo.listMenuItems(c.env.DB)).some((m) => m.name === u.name);
+  if (!exists) {
+    await c.env.DB.prepare('INSERT INTO menu_items (name, toss_item_id) VALUES (?, ?)').bind(u.name, u.toss_item_id).run();
+  }
+  await c.env.DB.prepare('DELETE FROM unmapped_items WHERE key = ?').bind(key).run();
+  return c.json({ ok: true });
 });
 
 admin.delete('/unmapped/:key', async (c) => {
@@ -219,8 +325,20 @@ admin.get('/purchase-orders', async (c) => {
 
 admin.post('/purchase-orders', async (c) => c.json({ id: await issueReorderForAllLow(c.env) }));
 
+admin.post('/purchase-orders/:id/sent', async (c) => {
+  const ok = await repo.setPurchaseOrderStatus(c.env.DB, Number(c.req.param('id')), 'SENT', ['DRAFT']);
+  if (!ok) throw new Error('이미 처리된 발주서입니다');
+  return c.json({ ok });
+});
+
+admin.post('/purchase-orders/:id/receive', async (c) => {
+  const lines = await receivePurchaseOrder(c.env, Number(c.req.param('id')));
+  if (!lines) throw new Error('이미 입고된 발주서입니다');
+  return c.json({ lines });
+});
+
 // ── 설정 ─────────────────────────────────────────────
-admin.get('/settings', async (c) => c.json(await repo.getSettings(c.env.DB)));
+admin.get('/settings', async (c) => c.json(await publicSettings(c.env.DB)));
 
 admin.put('/settings', async (c) => {
   const b = await c.req.json<Record<string, string>>();
@@ -229,7 +347,7 @@ admin.put('/settings', async (c) => {
     parseHHMM(b[key]);
     await repo.setSetting(c.env.DB, key, b[key]);
   }
-  return c.json(await repo.getSettings(c.env.DB));
+  return c.json(await publicSettings(c.env.DB));
 });
 
 admin.post('/report/send', async (c) => {
@@ -238,12 +356,64 @@ admin.post('/report/send', async (c) => {
 });
 
 // ── 토스 ─────────────────────────────────────────────
+// 최근 토스 주문과 재고 반영 여부
+admin.get('/orders', async (c) => {
+  const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+  const { results } = await c.env.DB
+    .prepare(
+      `SELECT o.order_id, o.state, o.status, o.raw, o.first_seen, o.updated_at,
+              (SELECT COUNT(*) FROM stock_movements m WHERE m.ref = o.order_id AND m.reason = 'SALE') AS sale_lines,
+              (SELECT COALESCE(SUM(delta), 0) FROM stock_movements m WHERE m.ref = o.order_id AND m.reason IN ('SALE','CANCEL')) AS net
+       FROM sales_orders o ORDER BY o.first_seen DESC, o.order_id DESC LIMIT ?`,
+    )
+    .bind(limit)
+    .all<{ order_id: string; state: string; status: string; raw: string; first_seen: string; updated_at: string; sale_lines: number; net: number }>();
+  return c.json(
+    results.map(({ raw, ...r }) => {
+      let items = '';
+      let ordered_at: string | null = null;
+      try {
+        const o = normalizeOrder(JSON.parse(raw));
+        items = o.items.map((i) => (i.quantity === 1 ? i.name : `${i.name}×${i.quantity}`)).join(', ');
+        ordered_at = o.orderedAt ?? null;
+      } catch {}
+      const applied = r.status === 'BASELINE' ? 'baseline' : Math.abs(r.net) > 1e-6 ? 'deducted' : r.sale_lines > 0 ? 'restored' : 'none';
+      return { ...r, items, ordered_at, applied };
+    }),
+  );
+});
+
+// 시작 기준점 다시 잡기: 지금까지의 주문은 차감하지 않고, 이후 주문부터 차감
+admin.post('/toss/baseline', async (c) => {
+  await repo.setSetting(c.env.DB, 'sync_baseline_at', '');
+  return c.json(await markBaseline(c.env));
+});
+
 admin.post('/toss/sync', async (c) => c.json(await syncRecentOrders(c.env, Number(c.req.query('pages') ?? 1))));
 
 admin.post('/toss/orders/:orderId/sync', async (c) => c.json(await syncOrderById(c.env, c.req.param('orderId'))));
 
+// 토스 매장 메뉴 불러오기: ?source=catalog(기본) | orders(최근 주문에서)
+admin.post('/toss/import-menus', async (c) => {
+  const source = c.req.query('source') ?? 'catalog';
+  return c.json(source === 'orders' ? await importMenusFromOrders(c.env) : await importMenusFromCatalog(c.env));
+});
+admin.get('/toss/catalog', async (c) => c.json(await new TossClient(c.env).listCatalogItems(1, Number(c.req.query('size') ?? 5))));
+
 // 실제 응답 필드 확인용 (normalize.ts 필드명 맞출 때 사용)
 admin.get('/toss/orders', async (c) => c.json(await new TossClient(c.env).listOrders(1, Number(c.req.query('size') ?? 5))));
+// 주문 상세: 토스에서 다시 조회해 해석 결과와 원본을 함께 (필드명 확인용)
+admin.get('/toss/orders/:orderId/detail', async (c) => {
+  const raw = await new TossClient(c.env).getOrder(c.req.param('orderId'));
+  let normalized: unknown = null;
+  let error: string | null = null;
+  try {
+    normalized = normalizeOrder(raw);
+  } catch (e) {
+    error = (e as Error).message;
+  }
+  return c.json({ normalized, error, raw });
+});
 admin.get('/toss/orders/:orderId/raw', async (c) => c.json(await new TossClient(c.env).getOrder(c.req.param('orderId'))));
 
 // ── 텔레그램 ─────────────────────────────────────────

@@ -17,6 +17,16 @@ export async function getIngredient(db: D1Database, id: number): Promise<Ingredi
   return db.prepare('SELECT * FROM ingredients WHERE id = ?').bind(id).first<Ingredient>();
 }
 
+export async function getIngredientsByIds(db: D1Database, ids: number[]): Promise<Ingredient[]> {
+  const unique = [...new Set(ids)];
+  if (!unique.length) return [];
+  const { results } = await db
+    .prepare(`SELECT * FROM ingredients WHERE id IN (${unique.map(() => '?').join(',')})`)
+    .bind(...unique)
+    .all<Ingredient>();
+  return results;
+}
+
 /** 이름/발주명으로 재료 찾기. 정확히 일치하면 그것만, 아니면 부분일치 목록 */
 export async function searchIngredients(db: D1Database, query: string): Promise<Ingredient[]> {
   const all = await listIngredients(db);

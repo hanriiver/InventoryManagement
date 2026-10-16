@@ -2,133 +2,220 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#111214" />
 <title>재고 관리</title>
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-<header>
-  <h1>🍸 재고 관리</h1>
-  <nav id="tabs">
-    <button data-tab="stock" class="active">재고</button>
-    <button data-tab="ingredients">재료</button>
-    <button data-tab="menus">메뉴·레시피</button>
-    <button data-tab="history">기록·발주</button>
-    <button data-tab="settings">설정</button>
-  </nav>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">재고 관리</div>
+    <nav id="tabs" class="tabs" aria-label="메뉴">
+      <button data-tab="stock" class="active">재고</button>
+      <button data-tab="entry">입고·실사</button>
+      <button data-tab="menus">메뉴</button>
+      <button data-tab="history">기록</button>
+      <button data-tab="settings">설정</button>
+    </nav>
+  </div>
 </header>
 
 <main>
-  <section id="login" hidden>
-    <h2>관리자 토큰</h2>
-    <p class="muted">ADMIN_TOKEN 비밀값과 같은 값을 입력하세요. 이 브라우저에만 저장됩니다.</p>
-    <form id="login-form" class="row">
-      <input id="token" type="password" placeholder="ADMIN_TOKEN" required />
-      <button>확인</button>
+  <!-- 로그인 -->
+  <section id="login" class="panel narrow" hidden>
+    <h1>관리자 로그인</h1>
+    <p class="muted">ADMIN_TOKEN 값을 입력하세요. 이 기기에만 저장됩니다.</p>
+    <form id="login-form" class="stack">
+      <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" required />
+      <button class="primary">로그인</button>
     </form>
   </section>
 
-  <!-- 재고 현황 -->
-  <section data-panel="stock">
-    <div class="toolbar">
-      <h2>재고 현황</h2>
-      <button id="btn-reorder">기준 이하 발주서 보내기</button>
-    </div>
-    <table>
-      <thead><tr><th>재료</th><th>현재고</th><th>발주 기준</th><th></th></tr></thead>
-      <tbody id="stock-rows"></tbody>
-    </table>
-  </section>
-
-  <!-- 재료 -->
-  <section data-panel="ingredients" hidden>
-    <h2 id="ing-form-title">재료 추가</h2>
-    <form id="ing-form" class="grid">
-      <input type="hidden" name="id" />
-      <label>이름<input name="name" required placeholder="핸드릭스 진" /></label>
-      <label>분류
-        <select name="category">
-          <option value="liquor">술</option><option value="fruit">과일</option>
-          <option value="syrup">시럽</option><option value="etc">기타</option>
-        </select>
-      </label>
-      <label>단위
-        <select name="unit">
-          <option value="ml">ml (병)</option><option value="ea">개</option><option value="g">g</option>
-        </select>
-      </label>
-      <label class="ml-only">1병 용량(ml)<input name="container_size" type="number" step="any" value="700" /></label>
-      <label>표시 단위<input name="container_label" placeholder="병 / 개 / 팩" /></label>
-      <label class="ea-only">1개당 즙(ml)<input name="yield_ml" type="number" step="any" placeholder="레몬 40, 라임 20" /></label>
-      <label>발주 기준 (이하이면 알림)<input name="reorder_point" type="number" step="any" value="1" /></label>
-      <label>적정재고 (선택)<input name="par_level" type="number" step="any" placeholder="비우면 1개씩 발주" /></label>
-      <label>발주서 이름<input name="order_alias" placeholder="핸드릭스진" /></label>
-      <label>공급처
-        <select name="supplier"><option value="manual">직접 발주</option><option value="coupang">쿠팡 (예정)</option></select>
-      </label>
-      <label class="new-only">초기 재고<input name="initial_stock" placeholder="2 (병) 또는 350ml" /></label>
-      <div class="actions">
-        <button>저장</button>
-        <button type="button" id="ing-reset" class="secondary">새로 입력</button>
+  <!-- 재고 -->
+  <section data-panel="stock" class="panel">
+    <div class="page-head">
+      <h1>재고</h1>
+      <div class="head-actions">
+        <button id="btn-add-ingredient">재료 추가</button>
+        <button id="btn-reorder" class="primary">발주서 보내기</button>
       </div>
-    </form>
-    <h2>재료 목록</h2>
-    <table>
-      <thead><tr><th>이름</th><th>단위</th><th>기준/적정</th><th>발주명</th><th></th></tr></thead>
-      <tbody id="ing-rows"></tbody>
-    </table>
+    </div>
+    <div id="stock-summary" class="stats"></div>
+    <div class="filters">
+      <input id="stock-search" type="search" placeholder="재료 검색" />
+      <div id="stock-cats" class="chips"></div>
+      <label class="switch"><input type="checkbox" id="stock-low-only" /> 부족만</label>
+    </div>
+    <div id="stock-list"></div>
   </section>
 
-  <!-- 메뉴 / 레시피 -->
-  <section data-panel="menus" hidden>
-    <h2>메뉴 추가</h2>
-    <form id="menu-form" class="row">
-      <input name="name" placeholder="메뉴 이름 (토스 상품명과 같게)" required />
-      <input name="toss_item_id" placeholder="토스 상품 ID (선택)" />
-      <button>추가</button>
-    </form>
-    <p class="muted">토스 상품 ID가 있으면 ID로, 없으면 이름(공백 무시)으로 매칭합니다. "샷 추가" 같은 옵션도 같은 이름의 메뉴로 등록하면 차감됩니다.</p>
+  <!-- 입고·실사 -->
+  <section data-panel="entry" class="panel" hidden>
+    <div class="page-head">
+      <h1>입고·실사</h1>
+    </div>
+    <div id="entry-modes" class="segmented" role="tablist">
+      <button data-mode="restock" class="active">입고</button>
+      <button data-mode="count">실사</button>
+      <button data-mode="waste">폐기</button>
+    </div>
+    <p id="entry-hint" class="hint"></p>
+    <div class="filters">
+      <input id="entry-search" type="search" placeholder="재료 검색" />
+      <div id="entry-cats" class="chips"></div>
+    </div>
+    <div id="entry-list"></div>
+    <div class="savebar" id="entry-bar" hidden>
+      <span id="entry-count"></span>
+      <button id="entry-clear">비우기</button>
+      <button id="entry-save" class="primary">저장</button>
+    </div>
+  </section>
+
+  <!-- 메뉴 -->
+  <section data-panel="menus" class="panel" hidden>
+    <div class="page-head">
+      <h1>메뉴·레시피</h1>
+      <div class="head-actions">
+        <button id="btn-seed">가게 레시피 넣기</button>
+        <button id="btn-import-catalog" class="primary">토스 메뉴 불러오기</button>
+      </div>
+    </div>
+    <p class="hint">토스 메뉴를 불러온 뒤 레시피만 넣으면 됩니다. 음식처럼 재고와 무관한 메뉴는 <b>차감 안 함</b>으로 두세요.</p>
+    <div id="seed-result" class="result" hidden></div>
+    <div class="filters">
+      <input id="menu-search" type="search" placeholder="메뉴 검색" />
+      <div id="menu-filters" class="chips"></div>
+    </div>
     <div id="menu-list"></div>
   </section>
 
-  <!-- 기록 / 발주 -->
-  <section data-panel="history" hidden>
-    <h2>레시피 미등록 판매</h2>
-    <table><thead><tr><th>메뉴</th><th>토스 ID</th><th>누적 수량</th><th></th></tr></thead><tbody id="unmapped-rows"></tbody></table>
-    <h2>발주서</h2>
-    <div id="po-list"></div>
-    <h2>재고 변동 기록</h2>
-    <table><thead><tr><th>시각(UTC)</th><th>재료</th><th>변동</th><th>사유</th><th>참조</th></tr></thead><tbody id="mv-rows"></tbody></table>
+  <!-- 기록 -->
+  <section data-panel="history" class="panel" hidden>
+    <div class="page-head">
+      <h1>기록</h1>
+      <div class="head-actions">
+        <button id="btn-sync-orders">토스 동기화</button>
+      </div>
+    </div>
+    <div id="history-tabs" class="segmented">
+      <button data-sub="orders" class="active">주문</button>
+      <button data-sub="moves">재고 변동</button>
+      <button data-sub="pos">발주서</button>
+      <button data-sub="unmapped">미등록 판매</button>
+    </div>
+    <p id="history-hint" class="hint"></p>
+    <div id="history-body"></div>
   </section>
 
   <!-- 설정 -->
-  <section data-panel="settings" hidden>
-    <h2>연동 상태</h2>
-    <ul id="status" class="status"></ul>
-    <h2>마감 리포트</h2>
-    <form id="settings-form" class="grid">
-      <label>마감 리포트 시각 (KST)<input name="closing_time" placeholder="02:00" pattern="\d{1,2}:\d{2}" /></label>
-      <label>영업일 기준 시각 (KST)<input name="business_day_start" placeholder="06:00" pattern="\d{1,2}:\d{2}" /></label>
-      <div class="actions"><button>저장</button><button type="button" id="btn-report" class="secondary">지금 리포트 보내기</button></div>
-    </form>
-    <h2>도구</h2>
-    <div class="row wrap">
-      <button id="btn-tg-setup" class="secondary">텔레그램 웹훅 등록</button>
-      <button id="btn-sync" class="secondary">토스 주문 동기화</button>
-      <button id="btn-toss-sample" class="secondary">토스 주문 원본 보기</button>
-      <button id="btn-logout" class="secondary">로그아웃</button>
+  <section data-panel="settings" class="panel" hidden>
+    <div class="page-head"><h1>설정</h1></div>
+
+    <div class="group">
+      <h2>연동 상태</h2>
+      <div id="status" class="status-list"></div>
     </div>
-    <h2>테스트 판매 (토스 연동 전 확인용)</h2>
-    <form id="manual-sale" class="row">
-      <select name="menu_item_id" id="manual-menu"></select>
-      <input name="quantity" type="number" value="1" min="1" />
-      <button>판매 처리</button>
-    </form>
-    <pre id="output" class="output" hidden></pre>
+
+    <div class="group">
+      <h2>마감 리포트</h2>
+      <form id="settings-form" class="form-grid">
+        <label>리포트 보낼 시각<input name="closing_time" placeholder="02:00" pattern="\d{1,2}:\d{2}" inputmode="numeric" /></label>
+        <label>영업일이 바뀌는 시각<input name="business_day_start" placeholder="06:00" pattern="\d{1,2}:\d{2}" inputmode="numeric" /></label>
+        <div class="form-actions">
+          <button class="primary">저장</button>
+          <button type="button" id="btn-report">지금 보내기</button>
+        </div>
+      </form>
+      <p class="hint">새벽 마감이면 영업일 기준 시각 전까지를 전날 영업으로 계산합니다. 시각은 한국 시간입니다.</p>
+    </div>
+
+    <div class="group">
+      <h2>텔레그램·토스</h2>
+      <div class="button-row">
+        <button id="btn-tg-setup">텔레그램 웹훅 등록</button>
+        <button id="btn-sync">토스 주문 동기화</button>
+        <button id="btn-baseline">재고 반영 시작점 다시 잡기</button>
+      </div>
+      <p class="hint">웹훅 등록은 배포 후 한 번만 하면 됩니다. 시작점을 다시 잡으면 지금까지의 토스 주문은 재고에서 빼지 않습니다.</p>
+    </div>
+
+    <details class="group advanced">
+      <summary>고급</summary>
+      <div class="button-row">
+        <button id="btn-import-orders">최근 주문에서 메뉴 불러오기</button>
+        <button id="btn-toss-sample">토스 주문 원본 보기</button>
+        <button id="btn-reset" class="danger">메뉴·재고 초기화</button>
+      </div>
+      <h3>테스트 판매</h3>
+      <form id="manual-sale" class="inline-form">
+        <select name="menu_item_id" id="manual-menu"></select>
+        <input name="quantity" type="number" value="1" min="1" inputmode="numeric" />
+        <button>판매 처리</button>
+      </form>
+      <pre id="output" class="code" hidden></pre>
+    </details>
+
+    <div class="group">
+      <button id="btn-logout" class="link">로그아웃</button>
+    </div>
   </section>
 </main>
 
-<div id="toast" hidden></div>
+<!-- 수량 입력 -->
+<dialog id="qty-dialog">
+  <form method="dialog" id="qty-form">
+    <h2 id="qty-title"></h2>
+    <p class="muted" id="qty-hint"></p>
+    <div class="qty-inputs">
+      <label><input name="bottles" type="number" step="any" min="0" inputmode="decimal" /><span id="qty-label">병</span></label>
+      <label class="ml-extra"><span>+</span><input name="ml" type="number" step="any" min="0" inputmode="decimal" /><span>ml</span></label>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" formnovalidate>취소</button>
+      <button value="ok" class="primary">확인</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 재료 추가/수정 -->
+<dialog id="ing-dialog" class="wide">
+  <form id="ing-form">
+    <h2 id="ing-title">재료 추가</h2>
+    <input type="hidden" name="id" />
+    <div class="form-grid">
+      <label class="span2">이름<input name="name" required placeholder="고든스 진" /></label>
+      <label>분류
+        <select name="category">
+          <option value="liquor">술</option><option value="beer">맥주</option><option value="syrup">시럽</option>
+          <option value="fruit">과일</option><option value="etc">기타</option>
+        </select>
+      </label>
+      <label>단위
+        <select name="unit"><option value="ml">ml (병)</option><option value="ea">개수</option><option value="g">g</option></select>
+      </label>
+      <label class="ml-only">1병 용량 (ml)<input name="container_size" type="number" step="any" value="700" inputmode="decimal" /></label>
+      <label>표시 단위<input name="container_label" placeholder="병, 개, 캔" /></label>
+      <label class="ea-only">1개당 즙 (ml)<input name="yield_ml" type="number" step="any" placeholder="레몬 40, 라임 20" inputmode="decimal" /></label>
+      <label>발주 알림 기준<input name="reorder_point" type="number" step="any" value="1" inputmode="decimal" /></label>
+      <label>적정 재고<input name="par_level" type="number" step="any" placeholder="비우면 1개씩 발주" inputmode="decimal" /></label>
+      <label>발주서 이름<input name="order_alias" placeholder="고든스진" /></label>
+      <label>공급처
+        <select name="supplier"><option value="manual">직접 발주</option><option value="coupang">쿠팡</option></select>
+      </label>
+      <label class="new-only">처음 재고<input name="initial_stock" placeholder="2 또는 1병+300ml" /></label>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="ing-delete" class="danger" hidden>삭제</button>
+      <span class="grow"></span>
+      <button type="button" id="ing-cancel">취소</button>
+      <button class="primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" hidden></div>
 <script src="/app.js"></script>
 </body>
 </html>

@@ -53,11 +53,42 @@ async function hmacHex(secret: string, msg: string) {
 
 describe('telegram commands', () => {
   it('한글/영문 명령과 수량 분리', () => {
-    expect(parseCommand('/입고 핸드릭스 진 2')).toEqual({ name: 'restock', target: '핸드릭스 진', quantity: '2' });
-    expect(parseCommand('/count 레몬 12개')).toEqual({ name: 'count', target: '레몬', quantity: '12개' });
-    expect(parseCommand('/실사 핸드릭스 350 ml')).toEqual({ name: 'count', target: '핸드릭스', quantity: '350ml' });
-    expect(parseCommand('/재고')).toEqual({ name: 'stock', target: '', quantity: null });
-    expect(parseCommand('/stock@my_bot')).toEqual({ name: 'stock', target: '', quantity: null });
+    expect(parseCommand('/입고 핸드릭스 진 2')).toMatchObject({ name: 'restock', target: '핸드릭스 진', quantity: '2' });
+    expect(parseCommand('/count 레몬 12개')).toMatchObject({ name: 'count', target: '레몬', quantity: '12개' });
+    expect(parseCommand('/실사 핸드릭스 350 ml')).toMatchObject({ name: 'count', target: '핸드릭스', quantity: '350ml' });
+    expect(parseCommand('/재고')).toMatchObject({ name: 'stock', target: '', quantity: null });
+    expect(parseCommand('/stock@my_bot')).toMatchObject({ name: 'stock', target: '', quantity: null });
     expect(parseCommand('안녕')).toBeNull();
+  });
+});
+
+describe('order time and quantity', () => {
+  it('주문 시각: ISO / epoch 초 / epoch 밀리초', async () => {
+    const { parseTime } = await import('../src/toss/normalize');
+    expect(parseTime('2026-10-15T10:00:00Z')).toBe('2026-10-15T10:00:00.000Z');
+    expect(parseTime(1792058400)).toBe('2026-10-15T10:00:00.000Z');
+    expect(parseTime('1792058400000')).toBe('2026-10-15T10:00:00.000Z');
+    expect(parseTime('')).toBeNull();
+  });
+  it('amount(금액)를 수량으로 읽지 않음', () => {
+    const o = normalizeOrder({ id: 'X', state: 'COMPLETED', createdAt: 1792058400, lineItems: [{ itemName: '진토닉', amount: 15000 }] });
+    expect(o.items[0]!.quantity).toBe(1);
+    expect(o.orderedAt).toBe('2026-10-15T10:00:00.000Z');
+  });
+});
+
+describe('메뉴 항목 찾기 (필드명이 다를 때)', () => {
+  it('중첩된 상품 정보와 알 수 없는 배열 이름', () => {
+    const o = normalizeOrder({
+      resultType: 'SUCCESS',
+      success: {
+        id: '744', orderState: 'COMPLETED', createdAt: '2026-08-16T14:14:25Z',
+        payments: [{ method: 'CARD', amount: 15000 }],
+        discounts: [{ title: '단골 할인', amount: 1000 }],
+        orderLines: [{ item: { id: 'C1', title: '진토닉' }, quantity: 2, optionChoices: [{ title: '샷 추가', quantity: 1 }] }],
+      },
+    });
+    expect(o.status).toBe('COMPLETED');
+    expect(o.items).toEqual([{ tossItemId: 'C1', name: '진토닉', quantity: 2, options: [{ tossItemId: null, name: '샷 추가', quantity: 1 }] }]);
   });
 });

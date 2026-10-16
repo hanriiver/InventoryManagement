@@ -1,9 +1,14 @@
 # `cp .dev.vars.example .dev.vars` 후 값을 채우면 `npm run dev`에서 사용됩니다.
 ADMIN_TOKEN=change-me
+TOSS_MERCHANT_ID=
+# 매출(sale 앱) 키: 주문 조회
 TOSS_ACCESS_KEY=
 TOSS_SECRET_KEY=
-TOSS_MERCHANT_ID=
+# 메뉴(menu 앱) 키: 상품 조회. 앱 하나에 권한을 다 넣었다면 비워 두세요
+TOSS_MENU_ACCESS_KEY=
+TOSS_MENU_SECRET_KEY=
 TOSS_WEBHOOK_SECRET=
+# 텔레그램
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
-TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_WEBHOOK_SECRET=localtest123

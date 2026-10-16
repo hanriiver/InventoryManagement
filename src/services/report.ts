@@ -3,7 +3,7 @@ import * as repo from '../db/repo';
 import { businessDay, businessDayStartUtc, formatKst, isReportDue } from '../domain/time';
 import { formatStock } from '../domain/units';
 import { needsReorder, toOrderLine } from '../domain/reorder';
-import { sendMessage } from '../telegram/api';
+import { notify } from '../notify';
 import { stockListText } from '../telegram/messages';
 
 export async function buildDailyReport(env: Env, now = new Date()): Promise<string> {
@@ -26,7 +26,7 @@ export async function buildDailyReport(env: Env, now = new Date()): Promise<stri
   const ingredients = await repo.listIngredients(db);
   const byId = new Map(ingredients.map((i) => [i.id, i]));
 
-  const out = [`🌙 마감 리포트 ${day} (${formatKst(now)} 기준)`, `완료 주문: ${orders?.n ?? 0}건`, ''];
+  const out = [`마감 리포트 ${day} (${formatKst(now)} 기준)`, `완료 주문: ${orders?.n ?? 0}건`, ''];
   if (usage.length) {
     out.push('[오늘 사용량]');
     for (const u of usage) {
@@ -45,7 +45,7 @@ export async function buildDailyReport(env: Env, now = new Date()): Promise<stri
 }
 
 export async function sendDailyReport(env: Env, now = new Date()): Promise<void> {
-  await sendMessage(env, await buildDailyReport(env, now));
+  await notify(env, { text: await buildDailyReport(env, now) });
 }
 
 /** 크론에서 호출: 마감 시각이 지났고 오늘 아직 안 보냈으면 전송 */

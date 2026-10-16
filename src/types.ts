@@ -5,6 +5,9 @@ export interface Env {
   TOSS_ACCESS_KEY?: string;
   TOSS_SECRET_KEY?: string;
   TOSS_MERCHANT_ID?: string;
+  /** 메뉴(카탈로그) 조회용 앱 키. 비우면 TOSS_ACCESS_KEY/SECRET_KEY 사용 */
+  TOSS_MENU_ACCESS_KEY?: string;
+  TOSS_MENU_SECRET_KEY?: string;
   TOSS_WEBHOOK_SECRET?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
@@ -36,7 +39,10 @@ export interface MenuItem {
   id: number;
   name: string;
   toss_item_id: string | null;
+  /** 0이면 재고 차감 안 함 (음식 등). 판매돼도 알림 없이 무시 */
   active: number;
+  kind?: string;
+  category?: string | null;
 }
 
 export interface RecipeLine {
