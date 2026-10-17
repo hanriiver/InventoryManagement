@@ -32,12 +32,34 @@ export function stockLine(i: Ingredient): string {
   return `${i.name}: ${formatStock(i.stock, i)}${needsReorder(i) ? ' (부족)' : ''}`;
 }
 
-export function stockListText(ingredients: Ingredient[]): string {
+export function stockListText(ingredients: Ingredient[], recipeCounts?: Map<number, number>): string {
   if (!ingredients.length) return '등록된 재료가 없습니다. 관리자 웹에서 재료를 먼저 등록하세요.';
-  const order = ['liquor', 'beer', 'syrup', 'fruit', 'etc'];
+
+  const catOrder = ['liquor', 'beer', 'syrup', 'fruit', 'etc'];
+  const catRank = (c: string) => (catOrder.includes(c) ? catOrder.indexOf(c) : catOrder.length);
+
+  if (recipeCounts && recipeCounts.size > 0) {
+    const inRecipe = ingredients
+      .filter((i) => (recipeCounts.get(i.id) ?? 0) > 0)
+      .sort((a, b) => (recipeCounts.get(b.id) ?? 0) - (recipeCounts.get(a.id) ?? 0));
+    const notInRecipe = ingredients.filter((i) => (recipeCounts.get(i.id) ?? 0) === 0);
+
+    const out: string[] = [];
+    if (inRecipe.length) {
+      out.push('[칵테일 재료]', ...inRecipe.map(stockLine), '');
+    }
+    if (notInRecipe.length) {
+      const label: Record<string, string> = { liquor: '기타 주류', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
+      const cats = [...new Set(notInRecipe.map((i) => i.category))].sort((a, b) => catRank(a) - catRank(b));
+      for (const cat of cats) {
+        out.push(`[${label[cat] ?? cat}]`, ...notInRecipe.filter((i) => i.category === cat).map(stockLine), '');
+      }
+    }
+    return out.join('\n').trim();
+  }
+
   const label: Record<string, string> = { liquor: '술', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
-  const rank = (c: string) => (order.includes(c) ? order.indexOf(c) : order.length);
-  const cats = [...new Set(ingredients.map((i) => i.category))].sort((a, b) => rank(a) - rank(b));
+  const cats = [...new Set(ingredients.map((i) => i.category))].sort((a, b) => catRank(a) - catRank(b));
   const out: string[] = [];
   for (const cat of cats) {
     out.push(`[${label[cat] ?? cat}]`, ...ingredients.filter((i) => i.category === cat).map(stockLine), '');
@@ -60,6 +82,8 @@ export const HELP_TEXT = [
   '/실사 헨드릭스 1병+300ml — 실제 남은 양으로 맞추기',
   '/재료추가 탱커레이 700 — 새 술 등록 (700ml 병)',
   '/재료추가 코로나 캔 맥주 — 개수 단위 재료 등록',
+  '/서비스 고든스진 1 — 토스 미결제 서비스(무료 제공) 재고 차감',
+  '/서비스 고든스진 1, 레몬 5 — 한 번에 여러 개',
   '',
   '[발주·기타]',
   '/발주 — 기준 이하 재료로 발주서 만들기',

@@ -17,7 +17,7 @@ export interface Env {
 
 export type BaseUnit = 'ml' | 'ea' | 'g';
 export type Supplier = 'manual' | 'coupang';
-export type MovementReason = 'SALE' | 'CANCEL' | 'RESTOCK' | 'ADJUST' | 'WASTE';
+export type MovementReason = 'SALE' | 'CANCEL' | 'RESTOCK' | 'ADJUST' | 'WASTE' | 'SERVICE';
 
 export interface Ingredient {
   id: number;

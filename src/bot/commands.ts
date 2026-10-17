@@ -25,12 +25,16 @@ export async function runCommand(env: Env, text: string): Promise<string> {
     case 'help':
       return HELP_TEXT;
     case 'stock': {
-      const all = await repo.listIngredients(env.DB);
-      if (!cmd.rest) return stockListText(all);
+      const [all, recipes] = await Promise.all([repo.listIngredients(env.DB), repo.listRecipes(env.DB)]);
+      const recipeCounts = new Map<number, number>();
+      for (const r of recipes) {
+        recipeCounts.set(r.ingredient_id, (recipeCounts.get(r.ingredient_id) ?? 0) + 1);
+      }
+      if (!cmd.rest) return stockListText(all, recipeCounts);
       const cat = CATEGORY_WORDS[cmd.rest];
       if (cat) {
         const list = all.filter((i) => i.category === cat);
-        return list.length ? stockListText(list) : `'${cmd.rest}' 분류에 재료가 없습니다`;
+        return list.length ? stockListText(list, recipeCounts) : `'${cmd.rest}' 분류에 재료가 없습니다`;
       }
       const found = await repo.searchIngredients(env.DB, cmd.rest);
       return found.length ? found.map(stockLine).join('\n') : `'${cmd.rest}' 재료를 찾을 수 없습니다`;
@@ -95,6 +99,24 @@ export async function runCommand(env: Env, text: string): Promise<string> {
       const after = await setActualStock(env, ing.id, actual);
       const diff = actual - ing.stock;
       return `실사 보정: ${ing.name}\n${formatStock(ing.stock, ing)} → ${formatStock(after.stock, after)} (차이 ${diff >= 0 ? '+' : ''}${Math.round(diff * 100) / 100})`;
+    }
+    case 'service': {
+      const items = parseItems(cmd.rest);
+      if (!items.length || items.some((i) => !i.quantity)) {
+        throw new Error('사용법: /서비스 이름 수량  (예: /서비스 고든스진 1)\n여러 개는 쉼표나 줄바꿈으로: /서비스 고든스진 1, 레몬 5');
+      }
+      const out: string[] = [];
+      for (const item of items) {
+        try {
+          const ing = await resolveIngredient(env, item.name);
+          const amount = parseQuantity(item.quantity!, ing);
+          const after = await addMovement(env, ing.id, -amount, 'SERVICE', '서비스 제공');
+          out.push(`서비스 ${ing.name} -${formatStock(amount, ing)} → 현재 ${formatStock(after.stock, after)}`);
+        } catch (e) {
+          out.push(`실패 ${item.name}: ${(e as Error).message}`);
+        }
+      }
+      return out.join('\n');
     }
     case 'order': {
       const id = await issueReorderForAllLow(env);
