@@ -1,4 +1,4 @@
-export type CommandName = 'stock' | 'low' | 'add' | 'restock' | 'count' | 'order' | 'report' | 'sync' | 'help' | 'po_sent' | 'po_recv';
+export type CommandName = 'stock' | 'low' | 'add' | 'restock' | 'count' | 'order' | 'report' | 'sync' | 'help' | 'po_sent' | 'po_recv' | 'service';
 
 const ALIASES: Record<string, CommandName> = {
   stock: 'stock', 재고: 'stock',
@@ -11,6 +11,7 @@ const ALIASES: Record<string, CommandName> = {
   sync: 'sync', 동기화: 'sync',
   help: 'help', start: 'help', 도움: 'help', 도움말: 'help', 시작: 'help', 메뉴: 'help',
   발주완료: 'po_sent', 입고처리: 'po_recv',
+  service: 'service', 서비스: 'service',
 };
 
 export interface ParsedCommand {

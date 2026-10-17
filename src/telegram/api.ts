@@ -66,6 +66,7 @@ export async function setCommands(env: Env): Promise<unknown> {
       { command: 'add', description: '새 재료 등록: /재료추가 이름 700' },
       { command: 'order', description: '발주서 만들기 (/발주)' },
       { command: 'restock', description: '입고: /입고 이름 수량, 이름 수량 …' },
+      { command: 'service', description: '서비스(무료 제공): /서비스 이름 수량 (/서비스)' },
       { command: 'count', description: '실사 보정: /count 이름 수량 (/실사)' },
       { command: 'report', description: '오늘 리포트 (/리포트)' },
       { command: 'sync', description: '토스 주문 동기화 (/동기화)' },
