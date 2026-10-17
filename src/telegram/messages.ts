@@ -35,22 +35,19 @@ export function stockLine(i: Ingredient): string {
 export function stockListText(ingredients: Ingredient[], recipeCounts?: Map<number, number>): string {
   if (!ingredients.length) return '등록된 재료가 없습니다. 관리자 웹에서 재료를 먼저 등록하세요.';
 
-  const catOrder = ['liquor', 'beer', 'syrup', 'fruit', 'etc'];
+  // 카테고리 표시 순서: 칵테일 재료 → 위스키 → 맥주 → 과일 → 시럽 → 기타
+  const catOrder = ['liquor', 'whisky', 'beer', 'fruit', 'syrup', 'etc'];
   const catRank = (c: string) => (catOrder.includes(c) ? catOrder.indexOf(c) : catOrder.length);
+  const recipeLabel: Record<string, string> = { liquor: '베이스 주류', whisky: '위스키', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '음료·기타' };
+  const nonRecipeLabel: Record<string, string> = { liquor: '기타 주류', whisky: '위스키', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
 
   if (recipeCounts && recipeCounts.size > 0) {
-    const inRecipe = ingredients
-      .filter((i) => (recipeCounts.get(i.id) ?? 0) > 0)
-      .sort((a, b) => (recipeCounts.get(b.id) ?? 0) - (recipeCounts.get(a.id) ?? 0));
+    const inRecipe = ingredients.filter((i) => (recipeCounts.get(i.id) ?? 0) > 0);
     const notInRecipe = ingredients.filter((i) => (recipeCounts.get(i.id) ?? 0) === 0);
-
-    const recipeLabel: Record<string, string> = { liquor: '베이스 주류', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '음료·기타' };
-    const recipeCatOrder = ['liquor', 'beer', 'fruit', 'syrup', 'etc'];
-    const recipeCatRank = (c: string) => (recipeCatOrder.includes(c) ? recipeCatOrder.indexOf(c) : recipeCatOrder.length);
 
     const out: string[] = [];
     if (inRecipe.length) {
-      const recipeCats = [...new Set(inRecipe.map((i) => i.category))].sort((a, b) => recipeCatRank(a) - recipeCatRank(b));
+      const recipeCats = [...new Set(inRecipe.map((i) => i.category))].sort((a, b) => catRank(a) - catRank(b));
       for (const cat of recipeCats) {
         const items = inRecipe
           .filter((i) => i.category === cat)
@@ -59,16 +56,15 @@ export function stockListText(ingredients: Ingredient[], recipeCounts?: Map<numb
       }
     }
     if (notInRecipe.length) {
-      const label: Record<string, string> = { liquor: '기타 주류', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
       const cats = [...new Set(notInRecipe.map((i) => i.category))].sort((a, b) => catRank(a) - catRank(b));
       for (const cat of cats) {
-        out.push(`[${label[cat] ?? cat}]`, ...notInRecipe.filter((i) => i.category === cat).map(stockLine), '');
+        out.push(`[${nonRecipeLabel[cat] ?? cat}]`, ...notInRecipe.filter((i) => i.category === cat).map(stockLine), '');
       }
     }
     return out.join('\n').trim();
   }
 
-  const label: Record<string, string> = { liquor: '술', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
+  const label: Record<string, string> = { liquor: '술', whisky: '위스키', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
   const cats = [...new Set(ingredients.map((i) => i.category))].sort((a, b) => catRank(a) - catRank(b));
   const out: string[] = [];
   for (const cat of cats) {

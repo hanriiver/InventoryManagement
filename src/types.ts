@@ -33,7 +33,6 @@ export interface Ingredient {
   supplier: Supplier;
   stock: number;
   alert_active: number;
-  bot_hidden: number;
 }
 
 export interface MenuItem {
