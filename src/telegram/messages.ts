@@ -44,9 +44,19 @@ export function stockListText(ingredients: Ingredient[], recipeCounts?: Map<numb
       .sort((a, b) => (recipeCounts.get(b.id) ?? 0) - (recipeCounts.get(a.id) ?? 0));
     const notInRecipe = ingredients.filter((i) => (recipeCounts.get(i.id) ?? 0) === 0);
 
+    const recipeLabel: Record<string, string> = { liquor: '베이스 주류', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '음료·기타' };
+    const recipeCatOrder = ['liquor', 'beer', 'fruit', 'syrup', 'etc'];
+    const recipeCatRank = (c: string) => (recipeCatOrder.includes(c) ? recipeCatOrder.indexOf(c) : recipeCatOrder.length);
+
     const out: string[] = [];
     if (inRecipe.length) {
-      out.push('[칵테일 재료]', ...inRecipe.map(stockLine), '');
+      const recipeCats = [...new Set(inRecipe.map((i) => i.category))].sort((a, b) => recipeCatRank(a) - recipeCatRank(b));
+      for (const cat of recipeCats) {
+        const items = inRecipe
+          .filter((i) => i.category === cat)
+          .sort((a, b) => (recipeCounts.get(b.id) ?? 0) - (recipeCounts.get(a.id) ?? 0));
+        out.push(`[${recipeLabel[cat] ?? cat}]`, ...items.map(stockLine), '');
+      }
     }
     if (notInRecipe.length) {
       const label: Record<string, string> = { liquor: '기타 주류', beer: '맥주', fruit: '과일', syrup: '시럽', etc: '기타' };
