@@ -22,7 +22,7 @@ export interface OrderCatalog {
 }
 
 export async function loadOrderCatalog(db: D1Database): Promise<OrderCatalog> {
-  const [ingredients, menuItems, recipes] = await Promise.all([repo.listIngredients(db), repo.listMenuItems(db), repo.listRecipes(db)]);
+  const [ingredients, menuItems, recipes] = await Promise.all([repo.listIngredients(db, true), repo.listMenuItems(db), repo.listRecipes(db)]);
   return { menuItems, recipes, ingredients: new Map(ingredients.map((i) => [i.id, i])) };
 }
 
