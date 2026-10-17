@@ -81,7 +81,7 @@ function ingredientValues(body: Record<string, unknown>) {
   };
 }
 
-admin.get('/ingredients', async (c) => c.json((await repo.listIngredients(c.env.DB, true)).map(view)));
+admin.get('/ingredients', async (c) => c.json((await repo.listIngredients(c.env.DB)).map(view)));
 
 admin.post('/ingredients', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
@@ -155,7 +155,7 @@ admin.get('/menu-items', async (c) => {
   const [menus, recipes, ingredients] = await Promise.all([
     repo.listMenuItems(c.env.DB),
     repo.listRecipes(c.env.DB),
-    repo.listIngredients(c.env.DB, true),
+    repo.listIngredients(c.env.DB),
   ]);
   const ingName = new Map(ingredients.map((i) => [i.id, i.name]));
   return c.json(
@@ -282,7 +282,7 @@ admin.get('/movements', async (c) => {
     )
     .bind(ingredientId ?? null, ingredientId ? Number(ingredientId) : null, limit)
     .all<{ ingredient_id: number; delta: number; balance: number }>();
-  const ings = new Map((await repo.listIngredients(c.env.DB, true)).map((i) => [i.id, i]));
+  const ings = new Map((await repo.listIngredients(c.env.DB)).map((i) => [i.id, i]));
   return c.json(
     results.map((r) => {
       const ing = ings.get(r.ingredient_id);

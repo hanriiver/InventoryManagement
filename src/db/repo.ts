@@ -8,10 +8,8 @@ export interface MovementInput {
   note?: string | null;
 }
 
-export async function listIngredients(db: D1Database, includeHidden = false): Promise<Ingredient[]> {
-  const { results } = await db
-    .prepare(`SELECT * FROM ingredients${includeHidden ? '' : ' WHERE bot_hidden = 0'} ORDER BY category, name`)
-    .all<Ingredient>();
+export async function listIngredients(db: D1Database): Promise<Ingredient[]> {
+  const { results } = await db.prepare('SELECT * FROM ingredients ORDER BY category, name').all<Ingredient>();
   return results;
 }
 
@@ -31,7 +29,7 @@ export async function getIngredientsByIds(db: D1Database, ids: number[]): Promis
 
 /** 이름/발주명으로 재료 찾기. 정확히 일치하면 그것만, 아니면 부분일치 목록 */
 export async function searchIngredients(db: D1Database, query: string): Promise<Ingredient[]> {
-  const all = await listIngredients(db, true);
+  const all = await listIngredients(db);
   const norm = (s: string | null) => (s ?? '').replace(/\s+/g, '').toLowerCase();
   const q = norm(query);
   const exact = all.filter((i) => norm(i.name) === q || norm(i.order_alias) === q);

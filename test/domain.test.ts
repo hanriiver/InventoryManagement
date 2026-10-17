@@ -8,7 +8,7 @@ import type { Ingredient, MenuItem, RecipeLine } from '../src/types';
 const ing = (over: Partial<Ingredient>): Ingredient => ({
   id: 1, name: '핸드릭스 진', category: 'liquor', unit: 'ml', container_size: 700, container_label: '병',
   yield_ml: null, reorder_point: 1, par_level: null, order_alias: '핸드릭스진', supplier: 'manual',
-  stock: 0, alert_active: 0, bot_hidden: 0, ...over,
+  stock: 0, alert_active: 0, ...over,
 });
 const lemon = ing({ id: 2, name: '레몬', category: 'fruit', unit: 'ea', container_size: 1, container_label: '개', yield_ml: 40, supplier: 'coupang' });
 

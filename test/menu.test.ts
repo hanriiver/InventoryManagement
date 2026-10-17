@@ -7,7 +7,7 @@ import type { Ingredient } from '../src/types';
 
 const gin: Ingredient = {
   id: 1, name: '핸드릭스 진', category: 'liquor', unit: 'ml', container_size: 700, container_label: '병',
-  yield_ml: null, reorder_point: 1, par_level: null, order_alias: null, supplier: 'manual', stock: 0, alert_active: 0, bot_hidden: 0,
+  yield_ml: null, reorder_point: 1, par_level: null, order_alias: null, supplier: 'manual', stock: 0, alert_active: 0,
 };
 
 describe('toss catalog', () => {
